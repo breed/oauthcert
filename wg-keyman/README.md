@@ -36,3 +36,45 @@ String base64Key = Base64.getEncoder().encodeToString(wgPublicKey);
 - each line has a HOST_NUMBER followed by whitespace followed by the CN of the user
 - lines that start with # are treated as a comment
 - blank lines are ignored
+
+# Running as a systemd service
+
+## Build the jar
+
+```bash
+mvn package -pl wg-keyman
+```
+
+## Create system user
+
+```bash
+sudo useradd -r -s /bin/false wgkeyman
+```
+
+## Install files
+
+```bash
+sudo mkdir -p /opt/wg-keyman
+sudo cp wg-keyman/target/wg-keyman-*.jar /opt/wg-keyman/wg-keyman.jar
+sudo cp wg-keyman/src/main/resources/application.properties /opt/wg-keyman/
+sudo cp /path/to/ca.crt /opt/wg-keyman/
+sudo cp /path/to/users.lst /opt/wg-keyman/
+sudo chown -R wgkeyman:wgkeyman /opt/wg-keyman
+```
+
+Edit `/opt/wg-keyman/application.properties` with your configuration.
+
+## Install and start the service
+
+```bash
+sudo cp wg-keyman/wg-keyman.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now wg-keyman
+```
+
+## Check status and logs
+
+```bash
+sudo systemctl status wg-keyman
+sudo journalctl -u wg-keyman -f
+```

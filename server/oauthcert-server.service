@@ -1,0 +1,27 @@
+[Unit]
+Description=OAuthCert Server - OAuth-based certificate signing service
+After=network.target
+
+[Service]
+Type=simple
+User=oauthcert
+Group=oauthcert
+WorkingDirectory=/opt/oauthcert/server
+ExecStart=/usr/bin/java -jar /opt/oauthcert/server/oauthcert-server.jar serve /opt/oauthcert/server/server.properties
+Restart=on-failure
+RestartSec=10
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/oauthcert/server
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=oauthcert-server
+
+[Install]
+WantedBy=multi-user.target

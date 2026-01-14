@@ -1,0 +1,30 @@
+[Unit]
+Description=WireGuard Key Manager - Certificate validation and config generation
+After=network.target
+
+[Service]
+Type=simple
+User=wgkeyman
+Group=wgkeyman
+WorkingDirectory=/opt/wg-keyman
+ExecStart=/usr/bin/java -jar /opt/wg-keyman/wg-keyman.jar
+Restart=on-failure
+RestartSec=10
+
+# Configuration via environment or application.properties in WorkingDirectory
+Environment=SPRING_CONFIG_LOCATION=/opt/wg-keyman/application.properties
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/wg-keyman
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=wg-keyman
+
+[Install]
+WantedBy=multi-user.target
