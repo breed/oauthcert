@@ -192,6 +192,86 @@ class CertificateServiceTest {
         assertTrue(result.errorMessage().contains("wireguard public key"));
     }
 
+    // Tests for processPublicKey (OAuth flow)
+
+    @Test
+    void testProcessPublicKey_Success() {
+        String validPublicKey = "xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8HQ14=";
+        CertificateService.CertificateResult result = certificateService.processPublicKey("test@example.com", validPublicKey);
+
+        assertTrue(result.valid());
+        assertNull(result.errorMessage());
+        assertEquals("test@example.com", result.commonName());
+        assertEquals(validPublicKey, result.wireguardPublicKey());
+        assertNotNull(result.wireguardConfig());
+        assertTrue(result.wireguardConfig().contains("[Interface]"));
+        assertTrue(result.wireguardConfig().contains("Address = 10.0.0.5/32"));
+    }
+
+    @Test
+    void testProcessPublicKey_UnauthorizedUser() {
+        String validPublicKey = "xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8HQ14=";
+        CertificateService.CertificateResult result = certificateService.processPublicKey("unknown@example.com", validPublicKey);
+
+        assertFalse(result.valid());
+        assertTrue(result.errorMessage().contains("not authorized"));
+    }
+
+    @Test
+    void testProcessPublicKey_EmptyPublicKey() {
+        CertificateService.CertificateResult result = certificateService.processPublicKey("test@example.com", "");
+
+        assertFalse(result.valid());
+        assertTrue(result.errorMessage().contains("required"));
+    }
+
+    @Test
+    void testProcessPublicKey_NullPublicKey() {
+        CertificateService.CertificateResult result = certificateService.processPublicKey("test@example.com", null);
+
+        assertFalse(result.valid());
+        assertTrue(result.errorMessage().contains("required"));
+    }
+
+    @Test
+    void testProcessPublicKey_InvalidPublicKeyFormat_TooShort() {
+        CertificateService.CertificateResult result = certificateService.processPublicKey("test@example.com", "shortkey");
+
+        assertFalse(result.valid());
+        assertTrue(result.errorMessage().contains("Invalid"));
+    }
+
+    @Test
+    void testProcessPublicKey_InvalidPublicKeyFormat_InvalidChars() {
+        // 44 characters but with invalid base64 characters
+        CertificateService.CertificateResult result = certificateService.processPublicKey("test@example.com", "xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8H!!!!");
+
+        assertFalse(result.valid());
+        assertTrue(result.errorMessage().contains("Invalid"));
+    }
+
+    @Test
+    void testProcessPublicKey_WhitespaceIsTrimmed() {
+        String validPublicKey = "  xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8HQ14=  ";
+        CertificateService.CertificateResult result = certificateService.processPublicKey("test@example.com", validPublicKey);
+
+        assertTrue(result.valid());
+        assertEquals("xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8HQ14=", result.wireguardPublicKey());
+    }
+
+    @Test
+    void testProcessPublicKey_MultipleUsersGetDifferentAddresses() {
+        String validPublicKey = "xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8HQ14=";
+
+        CertificateService.CertificateResult testResult = certificateService.processPublicKey("test@example.com", validPublicKey);
+        assertTrue(testResult.valid());
+        assertTrue(testResult.wireguardConfig().contains("Address = 10.0.0.5/32"));
+
+        CertificateService.CertificateResult adminResult = certificateService.processPublicKey("admin@example.com", validPublicKey);
+        assertTrue(adminResult.valid());
+        assertTrue(adminResult.wireguardConfig().contains("Address = 10.0.0.10/32"));
+    }
+
     private String createSignedCertificatePEM(String cn, byte[] wgPublicKey) throws Exception {
         var now = Calendar.getInstance();
         var expire = Calendar.getInstance();

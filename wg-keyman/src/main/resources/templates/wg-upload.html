@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WireGuard Key Manager</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .user-info {
+            background-color: #e7f3ff;
+            border: 1px solid #b6d4fe;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .user-info strong {
+            color: #0c5460;
+        }
+        .description {
+            color: #666;
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #333;
+        }
+        .form-group input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            font-size: 14px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        .form-group input[type="text"]:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .instructions {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .instructions h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        .instructions ol {
+            margin-bottom: 0;
+            padding-left: 20px;
+        }
+        .instructions li {
+            margin-bottom: 8px;
+        }
+        .instructions code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WireGuard Key Manager</h1>
+
+        <div class="user-info">
+            <strong>Logged in as:</strong> <span th:text="${name}"></span> (<span th:text="${email}"></span>)
+        </div>
+
+        <p class="description">
+            Enter your WireGuard public key to receive your WireGuard configuration.
+        </p>
+
+        <div th:if="${error}" class="error">
+            <strong>Error:</strong> <span th:text="${error}"></span>
+        </div>
+
+        <form action="/wg/submit" method="post">
+            <div class="form-group">
+                <label for="publicKey">WireGuard Public Key</label>
+                <input type="text" id="publicKey" name="publicKey"
+                       th:value="${publicKey}"
+                       placeholder="e.g., xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8HQ14="
+                       required>
+            </div>
+            <button type="submit">Submit Public Key</button>
+        </form>
+
+        <div class="instructions">
+            <h3>How to get your public key</h3>
+            <ol>
+                <li>Generate a WireGuard key pair using: <code>wg genkey | tee privatekey | wg pubkey > publickey</code></li>
+                <li>Copy the contents of the <code>publickey</code> file</li>
+                <li>Paste it in the field above</li>
+                <li>Keep your <code>privatekey</code> safe - you'll need to add it to your config</li>
+            </ol>
+        </div>
+    </div>
+</body>
+</html>

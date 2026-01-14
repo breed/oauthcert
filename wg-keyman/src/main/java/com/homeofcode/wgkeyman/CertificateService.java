@@ -237,6 +237,36 @@ public class CertificateService {
     }
 
     /**
+     * Process a public key for an OAuth-authenticated user.
+     * This is used by the /wg endpoint where the user is authenticated via OAuth
+     * and supplies their public key directly.
+     */
+    public CertificateResult processPublicKey(String email, String publicKey) {
+        // Check authorization
+        if (!isAuthorizedUser(email)) {
+            return CertificateResult.error("User '" + email + "' is not authorized");
+        }
+
+        // Validate public key format (should be 44 characters base64)
+        if (publicKey == null || publicKey.trim().isEmpty()) {
+            return CertificateResult.error("Public key is required");
+        }
+        publicKey = publicKey.trim();
+        if (publicKey.length() != 44 || !publicKey.matches("^[A-Za-z0-9+/]+=?$")) {
+            return CertificateResult.error("Invalid WireGuard public key format");
+        }
+
+        // Generate config
+        String wgConfig = generateWireguardConfig(email, publicKey);
+
+        // Update the WireGuard peers config with the new public key
+        peers.put(email, publicKey);
+        savePeers();
+
+        return CertificateResult.success(email, publicKey, wgConfig);
+    }
+
+    /**
      * Result of processing a certificate upload.
      */
     public record CertificateResult(
