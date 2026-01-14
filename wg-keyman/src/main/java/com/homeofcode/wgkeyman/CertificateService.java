@@ -13,9 +13,14 @@ import org.bouncycastle.operator.ContentVerifierProvider;
 import org.bouncycastle.operator.jcajce.JcaContentVerifierProviderBuilder;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
 import java.io.StringReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.cert.X509Certificate;
 import java.util.Base64;
+import java.util.Date;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class CertificateService {
@@ -25,8 +30,57 @@ public class CertificateService {
 
     private final WgKeymanConfig config;
 
+    // Track the latest certificate issue date for each user to prevent replay of old certificates
+    private final ConcurrentHashMap<String, Date> latestCertDate = new ConcurrentHashMap<>();
+
     public CertificateService(WgKeymanConfig config) {
         this.config = config;
+        loadCertDates();
+    }
+
+    private Path getCertDatesPath() {
+        return Path.of(config.getCertDatesFile());
+    }
+
+    private void loadCertDates() {
+        Path path = getCertDatesPath();
+        if (!Files.exists(path)) {
+            return;
+        }
+        try {
+            for (String line : Files.readAllLines(path)) {
+                line = line.trim();
+                if (line.isEmpty() || line.startsWith("#")) {
+                    continue;
+                }
+                String[] parts = line.split("\\s+", 2);
+                if (parts.length == 2) {
+                    try {
+                        long timestamp = Long.parseLong(parts[0]);
+                        String cn = parts[1];
+                        latestCertDate.put(cn, new Date(timestamp));
+                    } catch (NumberFormatException e) {
+                        // Skip invalid lines
+                    }
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Warning: Could not load certificate dates from " + path + ": " + e.getMessage());
+        }
+    }
+
+    private synchronized void saveCertDates() {
+        Path path = getCertDatesPath();
+        StringBuilder sb = new StringBuilder();
+        sb.append("# Certificate issue dates (timestamp CN)\n");
+        for (var entry : latestCertDate.entrySet()) {
+            sb.append(entry.getValue().getTime()).append(" ").append(entry.getKey()).append("\n");
+        }
+        try {
+            Files.writeString(path, sb.toString());
+        } catch (IOException e) {
+            System.err.println("Warning: Could not save certificate dates to " + path + ": " + e.getMessage());
+        }
     }
 
     /**
@@ -169,6 +223,13 @@ public class CertificateService {
                 return CertificateResult.error("User '" + cn + "' is not authorized");
             }
 
+            // Check certificate is not older than a previously uploaded certificate
+            Date certDate = cert.getNotBefore();
+            Date previousDate = latestCertDate.get(cn);
+            if (previousDate != null && certDate.before(previousDate)) {
+                return CertificateResult.error("Certificate is too old. A newer certificate was previously uploaded for this user.");
+            }
+
             // Extract wireguard public key
             String wgPublicKey = extractWireguardPublicKey(cert);
             if (wgPublicKey == null) {
@@ -177,6 +238,10 @@ public class CertificateService {
 
             // Generate config
             String wgConfig = generateWireguardConfig(cn, wgPublicKey);
+
+            // Update the latest certificate date for this user
+            latestCertDate.put(cn, certDate);
+            saveCertDates();
 
             return CertificateResult.success(cn, wgPublicKey, wgConfig);
 

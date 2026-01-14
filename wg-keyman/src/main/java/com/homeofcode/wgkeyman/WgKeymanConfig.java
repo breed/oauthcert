@@ -35,6 +35,9 @@ public class WgKeymanConfig {
     @Value("${wgmgr.users-file:}")
     private String usersFilePath;
 
+    @Value("${wgmgr.cert-dates-file:cert-dates.dat}")
+    private String certDatesFile;
+
     private X509CertificateHolder caCert;
     private Map<String, Integer> userHostNumbers = new HashMap<>();
 
@@ -54,7 +57,9 @@ public class WgKeymanConfig {
         }
 
         if (isBlank(network)) {
-            exitWithError("wgmgr.network is not defined. Set the VPN network (e.g., 10.0.0.0/24).");
+            exitWithError("wgmgr.network is not defined. Set the VPN network (e.g., 10.0.0.0/24 or fd00::/64).");
+        } else if (!isValidNetworkFormat(network)) {
+            exitWithError("wgmgr.network has invalid format: '" + network + "'. Expected format: IPv4/CIDR (e.g., 10.0.0.0/24) or IPv6/CIDR (e.g., fd00::/64).");
         }
 
         if (isBlank(serverEndpoint)) {
@@ -87,6 +92,39 @@ public class WgKeymanConfig {
         return value == null || value.trim().isEmpty();
     }
 
+    private boolean isValidNetworkFormat(String network) {
+        String[] parts = network.split("/");
+        if (parts.length != 2) {
+            return false;
+        }
+        String ip = parts[0];
+        try {
+            int cidr = Integer.parseInt(parts[1]);
+            if (isIPv6(ip)) {
+                return cidr >= 0 && cidr <= 128;
+            } else {
+                // IPv4 validation
+                String[] octets = ip.split("\\.");
+                if (octets.length != 4) {
+                    return false;
+                }
+                for (String octet : octets) {
+                    int val = Integer.parseInt(octet);
+                    if (val < 0 || val > 255) {
+                        return false;
+                    }
+                }
+                return cidr >= 0 && cidr <= 32;
+            }
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    private boolean isIPv6(String ip) {
+        return ip.contains(":");
+    }
+
     private void loadCaCert() {
         try (var reader = new FileReader(caCertPath);
              var pemParser = new PEMParser(reader)) {
@@ -100,6 +138,7 @@ public class WgKeymanConfig {
     }
 
     private void loadUsers() {
+        boolean ipv6 = isIPv6(network.split("/")[0]);
         try {
             var path = Path.of(usersFilePath);
             for (String line : Files.readAllLines(path)) {
@@ -110,11 +149,13 @@ public class WgKeymanConfig {
                 String[] parts = line.split("\\s+", 2);
                 if (parts.length == 2) {
                     try {
-                        int hostNumber = Integer.parseInt(parts[0]);
+                        // For IPv6, parse host number as hex; for IPv4, parse as decimal
+                        int hostNumber = Integer.parseInt(parts[0], ipv6 ? 16 : 10);
                         String cn = parts[1];
                         userHostNumbers.put(cn, hostNumber);
                     } catch (NumberFormatException e) {
-                        exitWithError("Invalid host number in users file: " + line);
+                        String format = ipv6 ? "hexadecimal" : "decimal";
+                        exitWithError("Invalid host number in users file (expected " + format + "): " + line);
                     }
                 } else {
                     exitWithError("Invalid line format in users file (expected 'HOST_NUMBER EMAIL'): " + line);
@@ -153,18 +194,29 @@ public class WgKeymanConfig {
         return userHostNumbers;
     }
 
+    public String getCertDatesFile() {
+        return certDatesFile;
+    }
+
     /**
      * Get the client IP address based on the network and host number.
-     * For example, if network is "10.0.0.0/24" and hostNumber is 5,
-     * returns "10.0.0.5/32".
+     * For IPv4: replaces the last octet (e.g., 10.0.0.0/24 + host 5 = 10.0.0.5/32)
+     * For IPv6: appends host as hex to prefix (e.g., fd00::/64 + host 5 = fd00::5/128)
      */
     public String getClientAddress(int hostNumber) {
         String[] networkParts = network.split("/");
         String baseIp = networkParts[0];
-        String[] octets = baseIp.split("\\.");
-        // Replace last octet with host number
-        octets[3] = String.valueOf(hostNumber);
-        return String.join(".", octets) + "/32";
+
+        if (isIPv6(baseIp)) {
+            // IPv6: append host number as hex to the prefix
+            String prefix = baseIp.endsWith("::") ? baseIp : baseIp.replaceAll("::?$", "::");
+            return prefix + Integer.toHexString(hostNumber) + "/128";
+        } else {
+            // IPv4: replace last octet
+            String[] octets = baseIp.split("\\.");
+            octets[3] = String.valueOf(hostNumber);
+            return String.join(".", octets) + "/32";
+        }
     }
 
     /**

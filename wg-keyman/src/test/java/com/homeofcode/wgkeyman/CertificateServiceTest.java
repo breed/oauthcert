@@ -310,5 +310,10 @@ class CertificateServiceTest {
         public String getAllowedIps() {
             return "10.0.0.0/24";
         }
+
+        @Override
+        public String getCertDatesFile() {
+            return System.getProperty("java.io.tmpdir") + "/wg-keyman-test-cert-dates.dat";
+        }
     }
 }
