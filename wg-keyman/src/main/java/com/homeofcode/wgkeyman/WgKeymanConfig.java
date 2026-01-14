@@ -17,56 +17,115 @@ import java.util.Map;
 @Configuration
 public class WgKeymanConfig {
 
-    @Value("${wgmgr.server}")
+    @Value("${wgmgr.server:}")
     private String serverAddress;
 
-    @Value("${wgmgr.network}")
+    @Value("${wgmgr.network:}")
     private String network;
 
-    @Value("${wgmgr.server-endpoint}")
+    @Value("${wgmgr.server-endpoint:}")
     private String serverEndpoint;
 
-    @Value("${wgmgr.server-public-key}")
+    @Value("${wgmgr.server-public-key:}")
     private String serverPublicKey;
 
-    @Value("${wgmgr.ca-cert:ca.crt}")
+    @Value("${wgmgr.ca-cert:}")
     private String caCertPath;
 
-    @Value("${wgmgr.users-file:users.lst}")
+    @Value("${wgmgr.users-file:}")
     private String usersFilePath;
 
     private X509CertificateHolder caCert;
     private Map<String, Integer> userHostNumbers = new HashMap<>();
 
+    // Protected constructor for test subclasses
+    protected WgKeymanConfig() {}
+
     @PostConstruct
-    public void init() throws IOException {
+    public void init() {
+        validateConfiguration();
         loadCaCert();
         loadUsers();
     }
 
-    private void loadCaCert() throws IOException {
-        try (var reader = new FileReader(caCertPath);
-             var pemParser = new PEMParser(reader)) {
-            caCert = (X509CertificateHolder) pemParser.readObject();
+    private void validateConfiguration() {
+        if (isBlank(serverAddress)) {
+            exitWithError("wgmgr.server is not defined. Set the VPN server IP address.");
+        }
+
+        if (isBlank(network)) {
+            exitWithError("wgmgr.network is not defined. Set the VPN network (e.g., 10.0.0.0/24).");
+        }
+
+        if (isBlank(serverEndpoint)) {
+            exitWithError("wgmgr.server-endpoint is not defined. Set the server endpoint (e.g., vpn.example.com:51820).");
+        }
+
+        if (isBlank(serverPublicKey)) {
+            exitWithError("wgmgr.server-public-key is not defined. Set the WireGuard server's public key.");
+        }
+
+        if (isBlank(caCertPath)) {
+            exitWithError("wgmgr.ca-cert is not defined. Set the path to the CA certificate file.");
+        } else if (!Files.exists(Path.of(caCertPath))) {
+            exitWithError("CA certificate file not found: " + caCertPath);
+        }
+
+        if (isBlank(usersFilePath)) {
+            exitWithError("wgmgr.users-file is not defined. Set the path to the users list file.");
+        } else if (!Files.exists(Path.of(usersFilePath))) {
+            exitWithError("Users file not found: " + usersFilePath);
         }
     }
 
-    private void loadUsers() throws IOException {
-        var path = Path.of(usersFilePath);
-        if (!Files.exists(path)) {
-            return;
+    private void exitWithError(String message) {
+        System.err.println(message);
+        Runtime.getRuntime().halt(1);
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+    private void loadCaCert() {
+        try (var reader = new FileReader(caCertPath);
+             var pemParser = new PEMParser(reader)) {
+            caCert = (X509CertificateHolder) pemParser.readObject();
+            if (caCert == null) {
+                exitWithError("Could not parse CA certificate from: " + caCertPath);
+            }
+        } catch (IOException e) {
+            exitWithError("Could not read CA certificate file: " + e.getMessage());
         }
-        for (String line : Files.readAllLines(path)) {
-            line = line.trim();
-            if (line.isEmpty() || line.startsWith("#")) {
-                continue;
+    }
+
+    private void loadUsers() {
+        try {
+            var path = Path.of(usersFilePath);
+            for (String line : Files.readAllLines(path)) {
+                line = line.trim();
+                if (line.isEmpty() || line.startsWith("#")) {
+                    continue;
+                }
+                String[] parts = line.split("\\s+", 2);
+                if (parts.length == 2) {
+                    try {
+                        int hostNumber = Integer.parseInt(parts[0]);
+                        String cn = parts[1];
+                        userHostNumbers.put(cn, hostNumber);
+                    } catch (NumberFormatException e) {
+                        exitWithError("Invalid host number in users file: " + line);
+                    }
+                } else {
+                    exitWithError("Invalid line format in users file (expected 'HOST_NUMBER EMAIL'): " + line);
+                }
             }
-            String[] parts = line.split("\\s+", 2);
-            if (parts.length == 2) {
-                int hostNumber = Integer.parseInt(parts[0]);
-                String cn = parts[1];
-                userHostNumbers.put(cn, hostNumber);
-            }
+        } catch (IOException e) {
+            exitWithError("Could not read users file: " + e.getMessage());
+        }
+
+        if (userHostNumbers.isEmpty()) {
+            exitWithError("No users defined in users file: " + usersFilePath);
         }
     }
 
