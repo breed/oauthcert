@@ -12,5 +12,7 @@
     <modules>
         <module>server</module>
         <module>ovpn</module>
+        <module>wg</module>
+        <module>wg-keyman</module>
     </modules>
 </project>

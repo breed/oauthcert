@@ -1,0 +1,11 @@
+# WireGuard Key Manager - User List
+# Format: HOST_NUMBER CN
+# HOST_NUMBER is the last octet of the client's VPN IP address
+# CN is the Common Name (email) from the certificate
+
+# Example entries:
+# 2 alice@example.com
+# 3 bob@example.com
+# 4 charlie@example.com
+
+# Note: Host number 1 is typically reserved for the server

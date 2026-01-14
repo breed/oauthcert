@@ -4,8 +4,13 @@ import com.homeofcode.https.HttpPath;
 import com.homeofcode.https.MultiPartFormDataParser;
 import com.homeofcode.https.SimpleHttpsServer;
 import com.sun.net.httpserver.HttpExchange;
+import org.bouncycastle.asn1.ASN1Encodable;
 import org.bouncycastle.asn1.ASN1Primitive;
+import org.bouncycastle.asn1.pkcs.Attribute;
+import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
 import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
+import org.bouncycastle.asn1.x509.Extension;
+import org.bouncycastle.asn1.x509.Extensions;
 import org.bouncycastle.asn1.x500.AttributeTypeAndValue;
 import org.bouncycastle.asn1.x500.RDN;
 import org.bouncycastle.asn1.x500.X500Name;
@@ -304,6 +309,19 @@ public class AuthServer {
         // from https://stackoverflow.com/questions/7230330/sign-csr-using-bouncy-castle
         var builder = new X509v3CertificateBuilder(this.CACert.getIssuer(), new BigInteger(128, rand), now.getTime(),
                 expire.getTime(), subject, csr.getSubjectPublicKeyInfo());
+
+        // Copy extensions from CSR to certificate (e.g., wireguard public key)
+        Attribute[] attributes = csr.getAttributes(PKCSObjectIdentifiers.pkcs_9_at_extensionRequest);
+        for (Attribute attr : attributes) {
+            for (ASN1Encodable value : attr.getAttributeValues()) {
+                Extensions extensions = Extensions.getInstance(value);
+                for (var oid : extensions.getExtensionOIDs()) {
+                    Extension ext = extensions.getExtension(oid);
+                    builder.addExtension(ext);
+                }
+            }
+        }
+
         try {
             var signer = new JcaContentSignerBuilder(this.signatureAlgorithm).build(this.CAPrivateKey);
             var holder = builder.build(signer);
