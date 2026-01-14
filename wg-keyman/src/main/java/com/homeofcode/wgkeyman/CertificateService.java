@@ -20,6 +20,8 @@ import java.nio.file.Path;
 import java.security.cert.X509Certificate;
 import java.util.Base64;
 import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
@@ -33,9 +35,13 @@ public class CertificateService {
     // Track the latest certificate issue date for each user to prevent replay of old certificates
     private final ConcurrentHashMap<String, Date> latestCertDate = new ConcurrentHashMap<>();
 
+    // Track peers (CN -> public key) for the WireGuard config
+    private final Map<String, String> peers = new LinkedHashMap<>();
+
     public CertificateService(WgKeymanConfig config) {
         this.config = config;
         loadCertDates();
+        loadPeers();
     }
 
     private Path getCertDatesPath() {
@@ -80,6 +86,56 @@ public class CertificateService {
             Files.writeString(path, sb.toString());
         } catch (IOException e) {
             System.err.println("Warning: Could not save certificate dates to " + path + ": " + e.getMessage());
+        }
+    }
+
+    private Path getPeersPath() {
+        return Path.of(config.getPeersFile());
+    }
+
+    private void loadPeers() {
+        Path path = getPeersPath();
+        if (!Files.exists(path)) {
+            return;
+        }
+        try {
+            String currentCn = null;
+            for (String line : Files.readAllLines(path)) {
+                line = line.trim();
+                if (line.startsWith("# ") && line.contains("@")) {
+                    // Comment line with CN (email)
+                    currentCn = line.substring(2).trim();
+                } else if (line.startsWith("PublicKey = ") && currentCn != null) {
+                    String publicKey = line.substring("PublicKey = ".length()).trim();
+                    peers.put(currentCn, publicKey);
+                    currentCn = null;
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Warning: Could not load peers from " + path + ": " + e.getMessage());
+        }
+    }
+
+    private synchronized void savePeers() {
+        Path path = getPeersPath();
+        StringBuilder sb = new StringBuilder();
+        for (var entry : peers.entrySet()) {
+            String cn = entry.getKey();
+            String publicKey = entry.getValue();
+            Integer hostNumber = config.getUserHostNumbers().get(cn);
+            if (hostNumber != null) {
+                String allowedIps = config.getClientAddress(hostNumber);
+                sb.append("[Peer]\n");
+                sb.append("# ").append(cn).append("\n");
+                sb.append("PublicKey = ").append(publicKey).append("\n");
+                sb.append("AllowedIPs = ").append(allowedIps).append("\n");
+                sb.append("\n");
+            }
+        }
+        try {
+            Files.writeString(path, sb.toString());
+        } catch (IOException e) {
+            System.err.println("Warning: Could not save peers to " + path + ": " + e.getMessage());
         }
     }
 
@@ -242,6 +298,10 @@ public class CertificateService {
             // Update the latest certificate date for this user
             latestCertDate.put(cn, certDate);
             saveCertDates();
+
+            // Update the WireGuard peers config with the new public key
+            peers.put(cn, wgPublicKey);
+            savePeers();
 
             return CertificateResult.success(cn, wgPublicKey, wgConfig);
 

@@ -145,13 +145,13 @@
         </div>
 
         <div class="actions">
-            <form action="/download" method="post" style="display: inline;">
+            <form action="/x509/download" method="post" style="display: inline;">
                 <input type="hidden" name="config" th:value="${wireguardConfig}">
                 <input type="hidden" name="cn" th:value="${commonName}">
                 <button type="submit" class="btn btn-primary">Download Config File</button>
             </form>
             <button class="copy-btn" onclick="copyConfig()">Copy to Clipboard</button>
-            <a href="/" class="btn btn-secondary">Upload Another</a>
+            <a href="/x509" class="btn btn-secondary">Upload Another</a>
         </div>
     </div>
 

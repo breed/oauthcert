@@ -38,6 +38,9 @@ public class WgKeymanConfig {
     @Value("${wgmgr.cert-dates-file:cert-dates.dat}")
     private String certDatesFile;
 
+    @Value("${wgmgr.peers-file:peers.conf}")
+    private String peersFile;
+
     private X509CertificateHolder caCert;
     private Map<String, Integer> userHostNumbers = new HashMap<>();
 
@@ -196,6 +199,10 @@ public class WgKeymanConfig {
 
     public String getCertDatesFile() {
         return certDatesFile;
+    }
+
+    public String getPeersFile() {
+        return peersFile;
     }
 
     /**

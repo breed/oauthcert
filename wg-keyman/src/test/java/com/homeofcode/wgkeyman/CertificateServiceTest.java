@@ -315,5 +315,10 @@ class CertificateServiceTest {
         public String getCertDatesFile() {
             return System.getProperty("java.io.tmpdir") + "/wg-keyman-test-cert-dates.dat";
         }
+
+        @Override
+        public String getPeersFile() {
+            return System.getProperty("java.io.tmpdir") + "/wg-keyman-test-peers.conf";
+        }
     }
 }
