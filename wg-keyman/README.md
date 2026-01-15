@@ -1,6 +1,29 @@
 This SpringBoot server will have a single page that users can upload their signed certificate files to.
 If the CN in the certificate matches the list of users, it will return a page with a valid wireguard configuration minus the private key.
 
+# HTTP endpoints
+
+- /x509 endpoints process X.509 certificates with the X.509 extension for the wireguard public key
+  - matches the CN from the X.509 certificate with the user list
+  - adds the public key to the wireguard config using the address from the user list and the public key from the certificate
+- /wg endpoints do the following
+  - use oauth to authenticate the client
+  - matches the client id with the user list
+  - adds the public key to the wireguard config using the address from the user list and the public key that client supplies
+
+# Wireguard configuration
+
+- when a new public key is supplied for a user the wireguard configuration is updated
+  - the user's IP address is constructed from the VPN network address and the users HOST_NUMBER
+  - the user's IP address and public key is added to the wireguard configuration
+  - a comment is added to the configuration indicating
+    - the user's name
+    - the date it was added
+    - the issue date of the certificate if X.509 was used
+- if an existing configuration is being changed, the old configuration should be written to the configuration file with a .old extension.
+  - the entries of the old configuration should be commented out
+  - a comment will be added an entry indicating when it was added to the old configuration
+
 # Wireguard Public Key Extraction
 
 The server extracts the client's wireguard public key from an X.509 extension in the uploaded certificate.
@@ -34,6 +57,7 @@ String base64Key = Base64.getEncoder().encodeToString(wgPublicKey);
 # users.lst file format
 
 - each line has a HOST_NUMBER followed by whitespace followed by the CN of the user
+  if the network is an IPv4 network, HOST_NUMBER will be decimal, otherwise it will be hexadecimal
 - lines that start with # are treated as a comment
 - blank lines are ignored
 
@@ -55,10 +79,10 @@ sudo useradd -r -s /bin/false wgkeyman
 
 ```bash
 sudo mkdir -p /opt/wg-keyman
-sudo cp wg-keyman/target/wg-keyman-*.jar /opt/wg-keyman/wg-keyman.jar
-sudo cp wg-keyman/src/main/resources/application.properties /opt/wg-keyman/
-sudo cp /path/to/ca.crt /opt/wg-keyman/
-sudo cp /path/to/users.lst /opt/wg-keyman/
+sudo cp wg-keyman-*.jar /opt/wg-keyman/wg-keyman.jar
+sudo cp application.properties /opt/wg-keyman/
+sudo cp ca.crt /opt/wg-keyman/
+sudo cp users.lst /opt/wg-keyman/
 sudo chown -R wgkeyman:wgkeyman /opt/wg-keyman
 ```
 
@@ -67,9 +91,8 @@ Edit `/opt/wg-keyman/application.properties` with your configuration.
 ## Install and start the service
 
 ```bash
-sudo cp wg-keyman/wg-keyman.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now wg-keyman
+sudo cp wg-keyman.service /opt/wg-key-man
+sudo systemctl enable --now /opt/wg-keyman/wg-keyman
 ```
 
 ## Check status and logs
