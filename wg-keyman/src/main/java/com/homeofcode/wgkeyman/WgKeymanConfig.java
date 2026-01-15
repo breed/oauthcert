@@ -41,6 +41,12 @@ public class WgKeymanConfig {
     @Value("${wgmgr.peers-file:peers.conf}")
     private String peersFile;
 
+    @Value("${wgmgr.interface:wg0}")
+    private String wgInterface;
+
+    @Value("${wgmgr.sync-command:}")
+    private String syncCommand;
+
     private X509CertificateHolder caCert;
     private Map<String, Integer> userHostNumbers = new HashMap<>();
 
@@ -203,6 +209,14 @@ public class WgKeymanConfig {
 
     public String getPeersFile() {
         return peersFile;
+    }
+
+    public String getWgInterface() {
+        return wgInterface;
+    }
+
+    public String getSyncCommand() {
+        return syncCommand;
     }
 
     /**

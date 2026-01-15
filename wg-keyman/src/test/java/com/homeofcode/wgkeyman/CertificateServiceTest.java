@@ -400,5 +400,16 @@ class CertificateServiceTest {
         public String getPeersFile() {
             return System.getProperty("java.io.tmpdir") + "/wg-keyman-test-peers.conf";
         }
+
+        @Override
+        public String getWgInterface() {
+            return "wg-test";
+        }
+
+        @Override
+        public String getSyncCommand() {
+            // Use echo for testing to avoid actually running wg commands
+            return "echo test-sync";
+        }
     }
 }
