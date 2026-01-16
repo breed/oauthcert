@@ -418,6 +418,40 @@ public class CertificateService {
     }
 
     /**
+     * Validate that a string is a valid WireGuard public key.
+     * A valid key is a 32-byte Curve25519 public key, base64-encoded (44 characters ending with =).
+     * @return null if valid, error message if invalid
+     */
+    public String validateWireguardPublicKey(String publicKey) {
+        if (publicKey == null || publicKey.trim().isEmpty()) {
+            return "Public key is required";
+        }
+        publicKey = publicKey.trim();
+
+        // WireGuard public keys are exactly 44 characters (32 bytes base64-encoded)
+        if (publicKey.length() != 44) {
+            return "Invalid WireGuard public key: must be exactly 44 characters";
+        }
+
+        // Must end with = (32 bytes = 256 bits, base64 encodes to 43 chars + 1 padding)
+        if (!publicKey.endsWith("=")) {
+            return "Invalid WireGuard public key: must end with '='";
+        }
+
+        // Validate base64 format and decode
+        try {
+            byte[] decoded = Base64.getDecoder().decode(publicKey);
+            if (decoded.length != 32) {
+                return "Invalid WireGuard public key: must decode to exactly 32 bytes";
+            }
+        } catch (IllegalArgumentException e) {
+            return "Invalid WireGuard public key: not valid base64";
+        }
+
+        return null; // Valid
+    }
+
+    /**
      * Process a public key for an OAuth-authenticated user.
      * This is used by the /wg endpoint where the user is authenticated via OAuth
      * and supplies their public key directly.
@@ -428,14 +462,12 @@ public class CertificateService {
             return CertificateResult.error("User '" + email + "' is not authorized");
         }
 
-        // Validate public key format (should be 44 characters base64)
-        if (publicKey == null || publicKey.trim().isEmpty()) {
-            return CertificateResult.error("Public key is required");
+        // Validate public key format
+        String validationError = validateWireguardPublicKey(publicKey);
+        if (validationError != null) {
+            return CertificateResult.error(validationError);
         }
         publicKey = publicKey.trim();
-        if (publicKey.length() != 44 || !publicKey.matches("^[A-Za-z0-9+/]+=?$")) {
-            return CertificateResult.error("Invalid WireGuard public key format");
-        }
 
         // Generate config
         String wgConfig = generateWireguardConfig(email, publicKey);

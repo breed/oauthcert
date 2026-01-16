@@ -238,16 +238,74 @@ class CertificateServiceTest {
         CertificateService.CertificateResult result = certificateService.processPublicKey("test@example.com", "shortkey");
 
         assertFalse(result.valid());
-        assertTrue(result.errorMessage().contains("Invalid"));
+        assertTrue(result.errorMessage().contains("44 characters"));
+    }
+
+    @Test
+    void testProcessPublicKey_InvalidPublicKeyFormat_TooLong() {
+        // 45 characters - too long
+        CertificateService.CertificateResult result = certificateService.processPublicKey("test@example.com", "xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8HQ14==");
+
+        assertFalse(result.valid());
+        assertTrue(result.errorMessage().contains("44 characters"));
     }
 
     @Test
     void testProcessPublicKey_InvalidPublicKeyFormat_InvalidChars() {
-        // 44 characters but with invalid base64 characters
-        CertificateService.CertificateResult result = certificateService.processPublicKey("test@example.com", "xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8H!!!!");
+        // 44 characters, ends with =, but has invalid base64 characters (!)
+        CertificateService.CertificateResult result = certificateService.processPublicKey("test@example.com", "xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8!!!!=");
 
         assertFalse(result.valid());
-        assertTrue(result.errorMessage().contains("Invalid"));
+        assertTrue(result.errorMessage().contains("not valid base64"));
+    }
+
+    @Test
+    void testProcessPublicKey_InvalidPublicKeyFormat_NotEndingWithEquals() {
+        // 44 characters but doesn't end with =
+        CertificateService.CertificateResult result = certificateService.processPublicKey("test@example.com", "xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8HQ14A");
+
+        assertFalse(result.valid());
+        assertTrue(result.errorMessage().contains("end with '='"));
+    }
+
+    @Test
+    void testValidateWireguardPublicKey_Valid() {
+        assertNull(certificateService.validateWireguardPublicKey("xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8HQ14="));
+    }
+
+    @Test
+    void testValidateWireguardPublicKey_Null() {
+        String error = certificateService.validateWireguardPublicKey(null);
+        assertNotNull(error);
+        assertTrue(error.contains("required"));
+    }
+
+    @Test
+    void testValidateWireguardPublicKey_Empty() {
+        String error = certificateService.validateWireguardPublicKey("");
+        assertNotNull(error);
+        assertTrue(error.contains("required"));
+    }
+
+    @Test
+    void testValidateWireguardPublicKey_WrongLength() {
+        String error = certificateService.validateWireguardPublicKey("tooshort=");
+        assertNotNull(error);
+        assertTrue(error.contains("44 characters"));
+    }
+
+    @Test
+    void testValidateWireguardPublicKey_NotEndingWithEquals() {
+        String error = certificateService.validateWireguardPublicKey("xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8HQ14A");
+        assertNotNull(error);
+        assertTrue(error.contains("end with '='"));
+    }
+
+    @Test
+    void testValidateWireguardPublicKey_InvalidBase64() {
+        String error = certificateService.validateWireguardPublicKey("xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8H!!!=");
+        assertNotNull(error);
+        assertTrue(error.contains("not valid base64"));
     }
 
     @Test
