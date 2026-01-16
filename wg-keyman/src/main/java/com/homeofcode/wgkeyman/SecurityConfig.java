@@ -18,8 +18,9 @@ public class SecurityConfig {
                         .requestMatchers("/x509/**").permitAll()
                         // Require OAuth2 login for /wg endpoints
                         .requestMatchers("/wg/**").authenticated()
-                        // Allow public access to static resources and root
+                        // Allow public access to static resources, root, and login
                         .requestMatchers("/", "/error", "/favicon.ico", "/style.css").permitAll()
+                        .requestMatchers("/login/**", "/oauth2/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .oauth2Login(oauth2 -> oauth2
@@ -28,6 +29,8 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf
                         // Disable CSRF for /x509 endpoints (they use certificate auth)
                         .ignoringRequestMatchers("/x509/**")
+                        // Disable CSRF for OAuth2 login endpoints
+                        .ignoringRequestMatchers("/login/**", "/oauth2/**")
                 );
 
         return http.build();

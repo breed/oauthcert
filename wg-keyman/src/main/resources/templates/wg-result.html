@@ -80,6 +80,21 @@
             display: block;
             margin-bottom: 5px;
         }
+        .warning-error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .warning-error strong {
+            display: block;
+            margin-bottom: 10px;
+        }
+        .warning-error p {
+            margin: 5px 0;
+        }
         .actions {
             display: flex;
             gap: 15px;
@@ -123,6 +138,12 @@
         <h1>WireGuard Configuration</h1>
         <span class="success-badge">Key Registered</span>
 
+        <div th:if="${warning}" class="warning-error">
+            <strong>Warning: Server configuration may not have been applied</strong>
+            <p th:text="${warning}"></p>
+            <p>Your configuration file is ready to download, but please contact an administrator to verify that your access has been activated.</p>
+        </div>
+
         <div class="info-box">
             <label>User:</label>
             <div class="value" th:text="${commonName}"></div>
@@ -145,7 +166,7 @@
         </div>
 
         <div class="actions">
-            <form action="/wg/download" method="post" style="display: inline;">
+            <form th:action="@{/wg/download}" method="post" style="display: inline;">
                 <input type="hidden" name="config" th:value="${wireguardConfig}">
                 <input type="hidden" name="cn" th:value="${commonName}">
                 <button type="submit" class="btn btn-primary">Download Config File</button>

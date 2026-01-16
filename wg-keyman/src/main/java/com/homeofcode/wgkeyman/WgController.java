@@ -30,6 +30,11 @@ public class WgController {
         String name = principal.getAttribute("name");
         model.addAttribute("email", email);
         model.addAttribute("name", name);
+
+        if (!certificateService.isAuthorizedUser(email)) {
+            return "wg-unauthorized";
+        }
+
         return "wg-upload";
     }
 
@@ -52,6 +57,7 @@ public class WgController {
         model.addAttribute("commonName", result.commonName());
         model.addAttribute("wireguardPublicKey", result.wireguardPublicKey());
         model.addAttribute("wireguardConfig", result.wireguardConfig());
+        model.addAttribute("warning", result.warningMessage());
         return "wg-result";
     }
 

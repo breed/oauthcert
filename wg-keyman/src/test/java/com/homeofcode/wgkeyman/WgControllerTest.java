@@ -44,13 +44,27 @@ class WgControllerTest {
     }
 
     @Test
-    void testIndex_Authenticated_ReturnsUploadPage() throws Exception {
+    void testIndex_AuthorizedUser_ReturnsUploadPage() throws Exception {
+        when(certificateService.isAuthorizedUser("test@example.com")).thenReturn(true);
+
         mockMvc.perform(get("/wg/")
                         .with(oauth2Login().oauth2User(createOAuth2User("test@example.com", "Test User"))))
                 .andExpect(status().isOk())
                 .andExpect(view().name("wg-upload"))
                 .andExpect(model().attribute("email", "test@example.com"))
                 .andExpect(model().attribute("name", "Test User"));
+    }
+
+    @Test
+    void testIndex_UnauthorizedUser_ReturnsUnauthorizedPage() throws Exception {
+        when(certificateService.isAuthorizedUser("unknown@example.com")).thenReturn(false);
+
+        mockMvc.perform(get("/wg/")
+                        .with(oauth2Login().oauth2User(createOAuth2User("unknown@example.com", "Unknown User"))))
+                .andExpect(status().isOk())
+                .andExpect(view().name("wg-unauthorized"))
+                .andExpect(model().attribute("email", "unknown@example.com"))
+                .andExpect(model().attribute("name", "Unknown User"));
     }
 
     @Test

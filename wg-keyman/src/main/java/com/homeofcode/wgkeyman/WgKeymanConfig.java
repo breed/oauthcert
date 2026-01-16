@@ -11,6 +11,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -47,8 +48,12 @@ public class WgKeymanConfig {
     @Value("${wgmgr.sync-command:}")
     private String syncCommand;
 
+    @Value("${wgmgr.x509-enabled:false}")
+    private boolean x509Enabled;
+
     private X509CertificateHolder caCert;
-    private Map<String, Integer> userHostNumbers = new HashMap<>();
+    private volatile Map<String, Integer> userHostNumbers = new HashMap<>();
+    private volatile FileTime usersFileLastModified;
 
     // Protected constructor for test subclasses
     protected WgKeymanConfig() {}
@@ -146,10 +151,12 @@ public class WgKeymanConfig {
         }
     }
 
-    private void loadUsers() {
+    private synchronized void loadUsers() {
         boolean ipv6 = isIPv6(network.split("/")[0]);
+        Map<String, Integer> newUserHostNumbers = new HashMap<>();
         try {
             var path = Path.of(usersFilePath);
+            usersFileLastModified = Files.getLastModifiedTime(path);
             for (String line : Files.readAllLines(path)) {
                 line = line.trim();
                 if (line.isEmpty() || line.startsWith("#")) {
@@ -161,21 +168,53 @@ public class WgKeymanConfig {
                         // For IPv6, parse host number as hex; for IPv4, parse as decimal
                         int hostNumber = Integer.parseInt(parts[0], ipv6 ? 16 : 10);
                         String cn = parts[1];
-                        userHostNumbers.put(cn, hostNumber);
+                        newUserHostNumbers.put(cn, hostNumber);
                     } catch (NumberFormatException e) {
                         String format = ipv6 ? "hexadecimal" : "decimal";
-                        exitWithError("Invalid host number in users file (expected " + format + "): " + line);
+                        System.err.println("Warning: Invalid host number in users file (expected " + format + "): " + line);
                     }
                 } else {
-                    exitWithError("Invalid line format in users file (expected 'HOST_NUMBER EMAIL'): " + line);
+                    System.err.println("Warning: Invalid line format in users file (expected 'HOST_NUMBER EMAIL'): " + line);
                 }
             }
         } catch (IOException e) {
-            exitWithError("Could not read users file: " + e.getMessage());
+            if (userHostNumbers.isEmpty()) {
+                exitWithError("Could not read users file: " + e.getMessage());
+            } else {
+                System.err.println("Warning: Could not reload users file: " + e.getMessage());
+                return;
+            }
         }
 
-        if (userHostNumbers.isEmpty()) {
-            exitWithError("No users defined in users file: " + usersFilePath);
+        if (newUserHostNumbers.isEmpty()) {
+            if (userHostNumbers.isEmpty()) {
+                exitWithError("No users defined in users file: " + usersFilePath);
+            } else {
+                System.err.println("Warning: Users file is now empty, keeping existing users");
+                return;
+            }
+        }
+
+        userHostNumbers = newUserHostNumbers;
+        System.out.println("Loaded " + userHostNumbers.size() + " users from " + usersFilePath);
+    }
+
+    /**
+     * Check if the users file has been modified and reload if necessary.
+     */
+    private void reloadUsersIfChanged() {
+        if (usersFilePath == null || usersFilePath.isEmpty()) {
+            return;
+        }
+        try {
+            Path path = Path.of(usersFilePath);
+            FileTime currentModified = Files.getLastModifiedTime(path);
+            if (usersFileLastModified == null || currentModified.compareTo(usersFileLastModified) > 0) {
+                System.out.println("Users file changed, reloading...");
+                loadUsers();
+            }
+        } catch (IOException e) {
+            System.err.println("Warning: Could not check users file modification time: " + e.getMessage());
         }
     }
 
@@ -200,6 +239,7 @@ public class WgKeymanConfig {
     }
 
     public Map<String, Integer> getUserHostNumbers() {
+        reloadUsersIfChanged();
         return userHostNumbers;
     }
 
@@ -217,6 +257,10 @@ public class WgKeymanConfig {
 
     public String getSyncCommand() {
         return syncCommand;
+    }
+
+    public boolean isX509Enabled() {
+        return x509Enabled;
     }
 
     /**

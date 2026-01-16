@@ -122,7 +122,7 @@
             <strong>Error:</strong> <span th:text="${error}"></span>
         </div>
 
-        <form action="/wg/submit" method="post">
+        <form th:action="@{/wg/submit}" method="post">
             <div class="form-group">
                 <label for="publicKey">WireGuard Public Key</label>
                 <input type="text" id="publicKey" name="publicKey"

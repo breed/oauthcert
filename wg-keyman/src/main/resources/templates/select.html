@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WireGuard Key Manager</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .description {
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        .options {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .option {
+            display: block;
+            padding: 25px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            text-decoration: none;
+            color: inherit;
+            transition: all 0.2s;
+        }
+        .option:hover {
+            border-color: #007bff;
+            background-color: #f8f9fa;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .option h2 {
+            margin: 0 0 10px 0;
+            color: #007bff;
+            font-size: 20px;
+        }
+        .option p {
+            margin: 0;
+            color: #666;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .option .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .badge-oauth {
+            background-color: #28a745;
+            color: white;
+        }
+        .badge-cert {
+            background-color: #6c757d;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WireGuard Key Manager</h1>
+        <p class="description">
+            Choose how you want to register your WireGuard public key.
+        </p>
+
+        <div class="options">
+            <a href="/wg/" class="option">
+                <h2>OAuth Login <span class="badge badge-oauth">Recommended</span></h2>
+                <p>
+                    Sign in with your organization account and enter your WireGuard public key directly.
+                    This is the simplest option if you already have a key pair.
+                </p>
+            </a>
+
+            <a href="/x509/" class="option">
+                <h2>X.509 Certificate <span class="badge badge-cert">Advanced</span></h2>
+                <p>
+                    Upload a signed X.509 certificate that contains your WireGuard public key.
+                    Use this if you generated a CSR with the <code>wg</code> tool.
+                </p>
+            </a>
+        </div>
+    </div>
+</body>
+</html>

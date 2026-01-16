@@ -47,6 +47,7 @@ public class WgKeymanController {
             model.addAttribute("commonName", result.commonName());
             model.addAttribute("wireguardPublicKey", result.wireguardPublicKey());
             model.addAttribute("wireguardConfig", result.wireguardConfig());
+            model.addAttribute("warning", result.warningMessage());
             return "result";
 
         } catch (Exception e) {

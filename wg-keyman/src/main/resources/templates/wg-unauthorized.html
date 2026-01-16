@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Access Denied - WireGuard Key Manager</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #dc3545;
+            margin-bottom: 20px;
+        }
+        .user-info {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 25px;
+        }
+        .user-info label {
+            font-weight: bold;
+            color: #495057;
+        }
+        .user-info .value {
+            color: #212529;
+        }
+        .message {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 25px;
+        }
+        .contact-info {
+            background-color: #e7f3ff;
+            border: 1px solid #b6d4fe;
+            padding: 20px;
+            border-radius: 5px;
+            text-align: left;
+        }
+        .contact-info h3 {
+            margin-top: 0;
+            color: #0c5460;
+        }
+        .contact-info p {
+            margin-bottom: 0;
+            color: #0c5460;
+        }
+        .btn {
+            display: inline-block;
+            padding: 12px 25px;
+            font-size: 16px;
+            border-radius: 5px;
+            text-decoration: none;
+            margin-top: 20px;
+            background-color: #6c757d;
+            color: white;
+            transition: background-color 0.2s;
+        }
+        .btn:hover {
+            background-color: #545b62;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">&#128274;</div>
+        <h1>Access Denied</h1>
+
+        <div class="user-info">
+            <label>Logged in as:</label>
+            <span class="value" th:text="${name}"></span>
+            (<span class="value" th:text="${email}"></span>)
+        </div>
+
+        <p class="message">
+            Your account is not authorized to access the WireGuard VPN.
+        </p>
+
+        <div class="contact-info">
+            <h3>Need Access?</h3>
+            <p>
+                Please contact your system administrator to request access to the VPN.
+                Include your email address (<strong th:text="${email}"></strong>) in your request.
+            </p>
+        </div>
+
+        <a href="/oauth2/authorization/google" class="btn">Try Different Account</a>
+    </div>
+</body>
+</html>

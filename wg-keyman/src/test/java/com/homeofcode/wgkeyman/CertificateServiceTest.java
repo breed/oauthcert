@@ -411,5 +411,10 @@ class CertificateServiceTest {
             // Use echo for testing to avoid actually running wg commands
             return "echo test-sync";
         }
+
+        @Override
+        public boolean isX509Enabled() {
+            return true;
+        }
     }
 }
