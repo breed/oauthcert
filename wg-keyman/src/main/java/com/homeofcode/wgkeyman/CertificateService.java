@@ -260,8 +260,8 @@ public class CertificateService {
     }
 
     /**
-     * Sync the WireGuard configuration using the configured command.
-     * Uses 'sudo wg syncconf <interface> <peers-file>' by default.
+     * Sync the WireGuard configuration using wg-quick strip and wg syncconf.
+     * Uses 'sudo wg syncconf <interface> <(wg-quick strip <peers-file>)' by default.
      * @return warning message if there was a problem, null if successful
      */
     private String syncWireguardConfig() {
@@ -269,12 +269,14 @@ public class CertificateService {
         String wgInterface = config.getWgInterface();
         String peersFile = config.getPeersFile();
 
-        // If no custom sync command, use default wg syncconf
+        // If no custom sync command, use wg-quick strip with wg syncconf
         String[] command;
         if (syncCommand == null || syncCommand.trim().isEmpty()) {
-            // Use absolute path for wg and peers file to match sudoers rules
+            // Use absolute paths and bash process substitution for wg-quick strip
             String absolutePeersFile = Path.of(peersFile).toAbsolutePath().toString();
-            command = new String[]{"sudo", "/usr/bin/wg", "syncconf", wgInterface, absolutePeersFile};
+            String bashCommand = "sudo /usr/bin/wg syncconf " + wgInterface +
+                    " <(/usr/bin/wg-quick strip " + absolutePeersFile + ")";
+            command = new String[]{"bash", "-c", bashCommand};
         } else {
             // Custom command - split by spaces (simple parsing)
             command = syncCommand.split("\\s+");
