@@ -53,7 +53,7 @@ String base64Key = Base64.getEncoder().encodeToString(wgPublicKey);
 - wgmgr.users-file: path to users list file (reloaded automatically when changed)
 - wgmgr.peers-file: path to WireGuard peers config file (default: peers.conf)
 - wgmgr.interface: WireGuard interface name (default: wg0)
-- wgmgr.sync-command: custom sync command (default: `sudo wg syncconf <interface> <peers-file>`)
+- wgmgr.sync-command: custom sync command (default: `wg-quick down/up <interface>`)
 - wgmgr.x509-enabled: enable X.509 certificate upload endpoint (default: false)
 
 # Important files
@@ -95,45 +95,60 @@ sudo chown -R wgkeyman:wgkeyman /opt/wg-keyman
 
 Edit `/opt/wg-keyman/application.properties` with your configuration.
 
+## Configure WireGuard to include peers.conf
+
+The wg-keyman service writes peer configurations to `peers.conf`. Your main WireGuard configuration file needs to include this file. Edit `/etc/wireguard/wg0.conf` and add a `PostUp` directive:
+
+```ini
+[Interface]
+PrivateKey = <server-private-key>
+Address = 10.0.0.1/24
+ListenPort = 51820
+PostUp = wg addconf %i /opt/wg-keyman/peers.conf
+
+# Static peers can still be added here
+# [Peer]
+# ...
+```
+
+The `PostUp` directive loads the peers from `peers.conf` when the interface comes up.
+
 ## Configure sudo for WireGuard sync
 
-The wg-keyman service needs to run `wg syncconf` to apply peer changes. Create a sudoers file to allow this without a password:
+The wg-keyman service uses `wg-quick` to reload the WireGuard interface when peers change. Create a sudoers file to allow this without a password:
 
 ```bash
 sudo visudo -f /etc/sudoers.d/wgkeyman
 ```
 
-Add the following line (adjust paths as needed):
+Add the following lines (adjust interface name as needed):
 
 ```
-wgkeyman ALL=(ALL) NOPASSWD: /usr/bin/wg syncconf wg0 /opt/wg-keyman/peers.conf
+wgkeyman ALL=(ALL) NOPASSWD: /usr/bin/wg-quick down wg0
+wgkeyman ALL=(ALL) NOPASSWD: /usr/bin/wg-quick up wg0
 ```
 
-**Important:** The sudoers rule must match the exact command that wg-keyman runs. By default, wg-keyman runs:
+**Important:** The sudoers rules must match the exact commands that wg-keyman runs. By default, wg-keyman runs:
 ```
-sudo /usr/bin/wg syncconf <interface> <absolute-path-to-peers-file>
+sudo /usr/bin/wg-quick down <interface>
+sudo /usr/bin/wg-quick up <interface>
 ```
-
-The peers file path is resolved to an absolute path based on the working directory. If running from `/opt/wg-keyman`, then `peers.conf` becomes `/opt/wg-keyman/peers.conf`.
 
 To verify the configuration:
 
 ```bash
-# Check what command would be run (from the service working directory)
-cd /opt/wg-keyman
-realpath peers.conf  # Shows: /opt/wg-keyman/peers.conf
-
-# Test the sudoers rule
-sudo -u wgkeyman sudo -n /usr/bin/wg syncconf wg0 /opt/wg-keyman/peers.conf
+# Test the sudoers rules
+sudo -u wgkeyman sudo -n /usr/bin/wg-quick down wg0
+sudo -u wgkeyman sudo -n /usr/bin/wg-quick up wg0
 ```
 
-This should run without prompting for a password (assuming the WireGuard interface exists).
+This should run without prompting for a password.
 
 **Security notes:**
-- The sudoers rule is restricted to only the specific `wg syncconf` command with exact arguments
+- The sudoers rules are restricted to only the specific `wg-quick` commands with exact arguments
 - The wgkeyman user cannot run any other commands as root
-- If you change `wgmgr.interface` or `wgmgr.peers-file` in application.properties, update the sudoers rule to match
-- Consider using an absolute path for `wgmgr.peers-file` to avoid ambiguity
+- If you change `wgmgr.interface` in application.properties, update the sudoers rules to match
+- Use `wgmgr.sync-command` to specify a custom sync command if needed
 
 ## Install and start the service
 
