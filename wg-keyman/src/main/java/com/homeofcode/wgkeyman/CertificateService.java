@@ -49,6 +49,7 @@ public class CertificateService {
         this.config = config;
         loadCertDates();
         loadPeers();
+        syncWireguardConfig();
     }
 
     private Path getCertDatesPath() {
@@ -260,23 +261,18 @@ public class CertificateService {
     }
 
     /**
-     * Sync the WireGuard configuration using wg-quick strip and wg syncconf.
-     * Uses 'sudo wg syncconf <interface> <(wg-quick strip <peers-file>)' by default.
+     * Sync the WireGuard configuration using systemd.
+     * Uses 'sudo systemctl reload wg-quick@<interface>' by default.
      * @return warning message if there was a problem, null if successful
      */
     private String syncWireguardConfig() {
         String syncCommand = config.getSyncCommand();
         String wgInterface = config.getWgInterface();
-        String peersFile = config.getPeersFile();
 
-        // If no custom sync command, use wg-quick strip with wg syncconf
+        // If no custom sync command, use systemd to reload WireGuard
         String[] command;
         if (syncCommand == null || syncCommand.trim().isEmpty()) {
-            // Use absolute paths and bash process substitution for wg-quick strip
-            String absolutePeersFile = Path.of(peersFile).toAbsolutePath().toString();
-            String bashCommand = "sudo /usr/bin/wg syncconf " + wgInterface +
-                    " <(/usr/bin/wg-quick strip " + absolutePeersFile + ")";
-            command = new String[]{"bash", "-c", bashCommand};
+            command = new String[]{"sudo", "-n", "systemctl", "reload", "wg-quick@" + wgInterface};
         } else {
             // Custom command - split by spaces (simple parsing)
             command = syncCommand.split("\\s+");

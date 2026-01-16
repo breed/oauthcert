@@ -53,7 +53,7 @@ String base64Key = Base64.getEncoder().encodeToString(wgPublicKey);
 - wgmgr.users-file: path to users list file (reloaded automatically when changed)
 - wgmgr.peers-file: path to WireGuard peers config file (default: peers.conf)
 - wgmgr.interface: WireGuard interface name (default: wg0)
-- wgmgr.sync-command: custom sync command (default: `sudo wg syncconf <interface> <(wg-quick strip <peers-file>)`)
+- wgmgr.sync-command: custom sync command (default: `sudo systemctl reload wg-quick@<interface>`)
 - wgmgr.x509-enabled: enable X.509 certificate upload endpoint (default: false)
 
 # Important files
@@ -97,10 +97,10 @@ Edit `/opt/wg-keyman/application.properties` with your configuration.
 
 ## Configure sudo for WireGuard sync
 
-The wg-keyman service uses `wg-quick strip` and `wg syncconf` to apply peer changes. The command runs via bash process substitution:
+The wg-keyman service uses systemd to reload the WireGuard configuration when peers change:
 
 ```bash
-bash -c "sudo /usr/bin/wg syncconf wg0 <(/usr/bin/wg-quick strip /opt/wg-keyman/peers.conf)"
+sudo systemctl reload wg-quick@wg0
 ```
 
 Create a sudoers file to allow this without a password:
@@ -112,22 +112,20 @@ sudo visudo -f /etc/sudoers.d/wgkeyman
 Add the following line (adjust interface name as needed):
 
 ```
-wgkeyman ALL=(ALL) NOPASSWD: /usr/bin/wg syncconf wg0 *
+wgkeyman ALL=(ALL) NOPASSWD: /usr/bin/systemctl reload wg-quick@wg0
 ```
-
-**Note:** The wildcard is needed because process substitution passes a `/dev/fd/XX` path to `wg syncconf`, which varies at runtime.
 
 To verify the configuration:
 
 ```bash
 # Test the sudoers rule
-sudo -u wgkeyman bash -c "sudo -n /usr/bin/wg syncconf wg0 <(/usr/bin/wg-quick strip /opt/wg-keyman/peers.conf)"
+sudo -u wgkeyman sudo -n systemctl reload wg-quick@wg0
 ```
 
 This should run without prompting for a password (assuming the WireGuard interface exists).
 
 **Security notes:**
-- The sudoers rule allows `wg syncconf` on the specified interface with any config source
+- The sudoers rule only allows reloading the specific WireGuard interface
 - The wgkeyman user cannot run any other commands as root
 - If you change `wgmgr.interface` in application.properties, update the sudoers rule to match
 
