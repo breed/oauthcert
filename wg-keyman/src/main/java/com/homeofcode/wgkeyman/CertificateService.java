@@ -260,45 +260,26 @@ public class CertificateService {
     }
 
     /**
-     * Sync the WireGuard configuration using wg-quick.
-     * Runs 'sudo wg-quick down <interface>' then 'sudo wg-quick up <interface>'.
-     * The main WireGuard config should include peers.conf via PostUp directive.
+     * Sync the WireGuard configuration using the configured command.
+     * Uses 'sudo wg syncconf <interface> <peers-file>' by default.
      * @return warning message if there was a problem, null if successful
      */
     private String syncWireguardConfig() {
         String syncCommand = config.getSyncCommand();
         String wgInterface = config.getWgInterface();
+        String peersFile = config.getPeersFile();
 
-        // If custom sync command is specified, use it
-        if (syncCommand != null && !syncCommand.trim().isEmpty()) {
-            String[] command = syncCommand.split("\\s+");
-            return runCommand(command);
+        // If no custom sync command, use default wg syncconf
+        String[] command;
+        if (syncCommand == null || syncCommand.trim().isEmpty()) {
+            // Use absolute path for wg and peers file to match sudoers rules
+            String absolutePeersFile = Path.of(peersFile).toAbsolutePath().toString();
+            command = new String[]{"sudo", "/usr/bin/wg", "syncconf", wgInterface, absolutePeersFile};
+        } else {
+            // Custom command - split by spaces (simple parsing)
+            command = syncCommand.split("\\s+");
         }
 
-        // Default: use wg-quick down/up to reload the interface
-        String[] downCommand = new String[]{"sudo", "/usr/bin/wg-quick", "down", wgInterface};
-        String[] upCommand = new String[]{"sudo", "/usr/bin/wg-quick", "up", wgInterface};
-
-        // Run wg-quick down (ignore errors - interface might not be up)
-        String downResult = runCommand(downCommand);
-        if (downResult != null) {
-            System.out.println("Note: wg-quick down returned: " + downResult + " (continuing with up)");
-        }
-
-        // Run wg-quick up
-        String upResult = runCommand(upCommand);
-        if (upResult != null) {
-            return upResult;
-        }
-
-        System.out.println("WireGuard config synced successfully");
-        return null;
-    }
-
-    /**
-     * Run a command and return an error message if it fails, null on success.
-     */
-    private String runCommand(String[] command) {
         try {
             System.out.println("Running: " + String.join(" ", command));
             ProcessBuilder pb = new ProcessBuilder(command);
@@ -317,9 +298,10 @@ public class CertificateService {
 
             int exitCode = process.waitFor();
             if (exitCode == 0) {
+                System.out.println("WireGuard config synced successfully");
                 return null;
             } else {
-                String warning = "Command failed (exit code " + exitCode + ")";
+                String warning = "WireGuard sync command failed (exit code " + exitCode + ")";
                 if (output.length() > 0) {
                     warning += ": " + output.toString().trim();
                 }
@@ -327,12 +309,12 @@ public class CertificateService {
                 return warning;
             }
         } catch (IOException e) {
-            String warning = "Could not run command: " + e.getMessage();
+            String warning = "Could not run WireGuard sync command: " + e.getMessage();
             System.err.println("Warning: " + warning);
             return warning;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            String warning = "Command was interrupted";
+            String warning = "WireGuard sync command was interrupted";
             System.err.println("Warning: " + warning);
             return warning;
         }
