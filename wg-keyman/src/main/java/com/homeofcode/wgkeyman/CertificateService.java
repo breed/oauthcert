@@ -336,6 +336,12 @@ public class CertificateService {
      * Validate that the certificate was signed by our CA.
      */
     public boolean validateCertificate(X509CertificateHolder cert) throws Exception {
+        // Check certificate validity period
+        Date now = new Date();
+        if (now.before(cert.getNotBefore()) || now.after(cert.getNotAfter())) {
+            return false;
+        }
+
         X509CertificateHolder caCert = config.getCaCert();
 
         // Convert CA cert to X509Certificate for verification
@@ -372,6 +378,9 @@ public class CertificateService {
         }
         // Get the raw bytes directly from the extension value (OCTET STRING)
         byte[] wgPublicKey = ext.getExtnValue().getOctets();
+        if (wgPublicKey.length != 32) {
+            return null;
+        }
         return Base64.getEncoder().encodeToString(wgPublicKey);
     }
 
@@ -522,6 +531,9 @@ public class CertificateService {
             if (cn == null) {
                 return CertificateResult.error("Certificate does not contain a Common Name");
             }
+            if (cn.chars().anyMatch(c -> c < 0x20 || c == 0x7f)) {
+                return CertificateResult.error("Certificate CN contains invalid characters");
+            }
 
             // Check authorization
             if (!isAuthorizedUser(cn)) {
@@ -539,6 +551,10 @@ public class CertificateService {
             String wgPublicKey = extractWireguardPublicKey(cert);
             if (wgPublicKey == null) {
                 return CertificateResult.error("Certificate does not contain a wireguard public key extension");
+            }
+            String keyValidationError = validateWireguardPublicKey(wgPublicKey);
+            if (keyValidationError != null) {
+                return CertificateResult.error("Invalid wireguard public key in certificate: " + keyValidationError);
             }
 
             // Generate config

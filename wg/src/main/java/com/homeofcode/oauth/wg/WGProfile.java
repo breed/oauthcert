@@ -122,6 +122,10 @@ public class WGProfile {
                 throws NoSuchAlgorithmException, OperatorCreationException, IOException, InterruptedException {
 
             /* validate all the parameters first */
+            if (!email.matches("[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}")) {
+                error(String.format("Invalid email address: %s", email));
+                System.exit(2);
+            }
             if (!workingDirectory.isDirectory()) {
                 error(String.format("%s is not a valid working directory.", workingDirectory.getCanonicalPath()));
                 System.exit(2);

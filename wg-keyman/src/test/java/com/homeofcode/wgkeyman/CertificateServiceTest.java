@@ -330,6 +330,37 @@ class CertificateServiceTest {
         assertTrue(adminResult.wireguardConfig().contains("Address = 10.0.0.10/32"));
     }
 
+    // Vuln: Expired certificate accepted without validity check
+    @Test
+    void testValidateCertificate_ExpiredCertIsRejected() throws Exception {
+        String pem = createExpiredCertificatePEM("test@example.com", testWgPublicKey);
+        X509CertificateHolder cert = certificateService.parseCertificate(pem);
+        assertFalse(certificateService.validateCertificate(cert),
+                "Expired certificate must be rejected");
+    }
+
+    // Vuln: CN with control characters allows WireGuard config injection
+    @Test
+    void testProcessCertificate_ControlCharInCn_IsRejected() throws Exception {
+        String pem = createSignedCertificatePEMWithCn("test@example.com\nAllowedIPs = 0.0.0.0/0", testWgPublicKey);
+        CertificateService.CertificateResult result = certificateService.processCertificate(pem);
+        assertFalse(result.valid(), "CN with control characters must be rejected");
+        assertTrue(result.errorMessage().contains("invalid characters"),
+                "Error must mention invalid characters");
+    }
+
+    // Vuln: WireGuard public key with wrong byte length not validated
+    @Test
+    void testExtractWireguardPublicKey_WrongLengthReturnsNull() throws Exception {
+        // Create a cert with a 16-byte (wrong length) key extension
+        byte[] shortKey = new byte[16];
+        new SecureRandom().nextBytes(shortKey);
+        String pem = createSignedCertificatePEM("test@example.com", shortKey);
+        X509CertificateHolder cert = certificateService.parseCertificate(pem);
+        assertNull(certificateService.extractWireguardPublicKey(cert),
+                "WireGuard public key with wrong byte length must return null");
+    }
+
     private String createSignedCertificatePEM(String cn, byte[] wgPublicKey) throws Exception {
         var now = Calendar.getInstance();
         var expire = Calendar.getInstance();
@@ -382,6 +413,74 @@ class CertificateServiceTest {
                 subject,
                 org.bouncycastle.asn1.x509.SubjectPublicKeyInfo.getInstance(clientKeyPair.getPublic().getEncoded())
         );
+
+        var signer = new JcaContentSignerBuilder("SHA256withECDSA").build(caKeyPair.getPrivate());
+        X509CertificateHolder cert = builder.build(signer);
+
+        StringWriter sw = new StringWriter();
+        try (var writer = new JcaPEMWriter(sw)) {
+            writer.writeObject(cert);
+        }
+        return sw.toString();
+    }
+
+    private String createExpiredCertificatePEM(String cn, byte[] wgPublicKey) throws Exception {
+        var past = Calendar.getInstance();
+        past.add(Calendar.YEAR, -2);
+        var expiredBefore = Calendar.getInstance();
+        expiredBefore.add(Calendar.YEAR, -1);
+
+        X500Name subject = new X500Name("CN=" + cn);
+        KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
+        keyGen.initialize(2048);
+        KeyPair clientKeyPair = keyGen.generateKeyPair();
+
+        var builder = new X509v3CertificateBuilder(
+                caCert.getSubject(),
+                new BigInteger(128, new SecureRandom()),
+                past.getTime(),
+                expiredBefore.getTime(), // notAfter is in the past
+                subject,
+                org.bouncycastle.asn1.x509.SubjectPublicKeyInfo.getInstance(clientKeyPair.getPublic().getEncoded())
+        );
+        builder.addExtension(new Extension(WG_PUBLIC_KEY_OID, false, new DEROctetString(wgPublicKey)));
+
+        var signer = new JcaContentSignerBuilder("SHA256withECDSA").build(caKeyPair.getPrivate());
+        X509CertificateHolder cert = builder.build(signer);
+
+        StringWriter sw = new StringWriter();
+        try (var writer = new JcaPEMWriter(sw)) {
+            writer.writeObject(cert);
+        }
+        return sw.toString();
+    }
+
+    private String createSignedCertificatePEMWithCn(String cn, byte[] wgPublicKey) throws Exception {
+        var now = Calendar.getInstance();
+        var expire = Calendar.getInstance();
+        expire.add(Calendar.MONTH, 4);
+
+        // Build X500Name directly from ASN.1 primitives to allow control chars in CN
+        // (the string-based X500Name constructor would reject them)
+        org.bouncycastle.asn1.x500.X500NameBuilder nameBuilder =
+                new org.bouncycastle.asn1.x500.X500NameBuilder(org.bouncycastle.asn1.x500.style.BCStyle.INSTANCE);
+        nameBuilder.addRDN(org.bouncycastle.asn1.x500.style.BCStyle.CN,
+                new org.bouncycastle.asn1.DERUTF8String(cn));
+        X500Name subject = nameBuilder.build();
+
+        KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
+        keyGen.initialize(2048);
+        KeyPair clientKeyPair = keyGen.generateKeyPair();
+
+        var builder = new X509v3CertificateBuilder(
+                caCert.getSubject(),
+                new BigInteger(128, new SecureRandom()),
+                now.getTime(),
+                expire.getTime(),
+                subject,
+                org.bouncycastle.asn1.x509.SubjectPublicKeyInfo.getInstance(clientKeyPair.getPublic().getEncoded())
+        );
+        builder.addExtension(new Extension(WG_PUBLIC_KEY_OID, false, new DEROctetString(wgPublicKey)));
 
         var signer = new JcaContentSignerBuilder("SHA256withECDSA").build(caKeyPair.getPrivate());
         X509CertificateHolder cert = builder.build(signer);

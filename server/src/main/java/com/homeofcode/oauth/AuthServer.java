@@ -23,9 +23,12 @@ import org.bouncycastle.openssl.PEMKeyPair;
 import org.bouncycastle.openssl.PEMParser;
 import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter;
 import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
+import org.bouncycastle.asn1.ASN1ObjectIdentifier;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+import org.bouncycastle.operator.jcajce.JcaContentVerifierProviderBuilder;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
+import org.bouncycastle.pkcs.PKCSException;
 import org.json.JSONObject;
 import picocli.CommandLine;
 import picocli.CommandLine.Help;
@@ -49,6 +52,7 @@ import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
+import java.security.SecureRandom;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -61,7 +65,6 @@ import java.util.Calendar;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Properties;
-import java.util.Random;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -105,7 +108,7 @@ public class AuthServer {
      * the nonces that are currently being authenticated
      */
     public ConcurrentHashMap<String, NonceRecord> nonces = new ConcurrentHashMap<>();
-    Random rand = new Random();
+    SecureRandom rand = new SecureRandom();
     /**
      * the client_id used to talk to google services
      */
@@ -190,6 +193,22 @@ public class AuthServer {
             System.out.println("problem accessing database: " + e.getMessage());
             System.exit(3);
         }
+    }
+
+    /** Package-private constructor for testing — bypasses network calls and file loading. */
+    AuthServer(Connection connection, java.security.PrivateKey caPrivateKey,
+               X509CertificateHolder caCert, String clientId, String authDomain) throws SQLException {
+        this.connection = connection;
+        this.CAPrivateKey = caPrivateKey;
+        this.CACert = caCert;
+        this.clientId = clientId;
+        this.authDomain = authDomain;
+        this.signatureAlgorithm = switch (caPrivateKey.getAlgorithm()) {
+            case "EC" -> "SHA256withECDSA";
+            case "RSA" -> "SHA256WithRSAEncryption";
+            default -> throw new IllegalArgumentException("Unsupported key algorithm: " + caPrivateKey.getAlgorithm());
+        };
+        certificateTable();
     }
 
     static private String getResource(String path) throws IOException {
@@ -291,13 +310,21 @@ public class AuthServer {
     }
 
     public X509CertificateHolder signCSR(byte[] csrBytes) throws IOException {
-        var rand = new Random();
+        var rand = new SecureRandom();
         var now = Calendar.getInstance();
         var expire = Calendar.getInstance();
         expire.add(Calendar.MONTH, 4);
         PEMParser pemParser = new PEMParser(new InputStreamReader(new ByteArrayInputStream(csrBytes)));
         var obj = pemParser.readObject();
         PKCS10CertificationRequest csr = (PKCS10CertificationRequest) obj;
+        try {
+            var verifier = new JcaContentVerifierProviderBuilder().build(csr.getSubjectPublicKeyInfo());
+            if (!csr.isSignatureValid(verifier)) {
+                throw new IOException("CSR signature is invalid");
+            }
+        } catch (OperatorCreationException | PKCSException e) {
+            throw new IOException("CSR signature verification failed: " + e.getMessage());
+        }
         var names = new X500Name(RFC4519Style.INSTANCE, csr.getSubject().getRDNs());
         ASN1Primitive email = null;
         for (var rdn : names.getRDNs()) {
@@ -310,14 +337,15 @@ public class AuthServer {
         var builder = new X509v3CertificateBuilder(this.CACert.getIssuer(), new BigInteger(128, rand), now.getTime(),
                 expire.getTime(), subject, csr.getSubjectPublicKeyInfo());
 
-        // Copy extensions from CSR to certificate (e.g., wireguard public key)
+        // Copy only the WireGuard public key extension from CSR (allowlist to prevent CA escalation)
+        var WG_PUBLIC_KEY_OID = new ASN1ObjectIdentifier("1.3.6.1.4.1.99999.1");
         Attribute[] attributes = csr.getAttributes(PKCSObjectIdentifiers.pkcs_9_at_extensionRequest);
         for (Attribute attr : attributes) {
             for (ASN1Encodable value : attr.getAttributeValues()) {
                 Extensions extensions = Extensions.getInstance(value);
-                for (var oid : extensions.getExtensionOIDs()) {
-                    Extension ext = extensions.getExtension(oid);
-                    builder.addExtension(ext);
+                Extension wgExt = extensions.getExtension(WG_PUBLIC_KEY_OID);
+                if (wgExt != null) {
+                    builder.addExtension(wgExt);
                 }
             }
         }
@@ -345,8 +373,9 @@ public class AuthServer {
     }
 
     void updateCertificateTable(String serialNumber, String email, X509CertificateHolder cert) throws SQLException {
-        connection.createStatement()
-                .execute(String.format("update certificate set revoked=1 where email=\"%s\";", email));
+        var revokeStmt = connection.prepareStatement("update certificate set revoked=1 where email=?;");
+        revokeStmt.setString(1, email);
+        revokeStmt.execute();
 
         var stmt = connection.prepareStatement("""
                 insert into certificate (
@@ -398,7 +427,8 @@ public class AuthServer {
     }
 
     public void sendFileDownload(HttpExchange exchange, byte[] data, String fileName) throws Exception {
-        exchange.getResponseHeaders().add("Content-Disposition", "attachment; filename=" + fileName);
+        String safeFileName = fileName.replaceAll("[\\r\\n\"]", "_");
+        exchange.getResponseHeaders().add("Content-Disposition", "attachment; filename=\"" + safeFileName + "\"");
         exchange.sendResponseHeaders(HTTP_OK, data.length);
         OutputStream outputStream = exchange.getResponseBody();
         outputStream.write(data);
@@ -537,12 +567,37 @@ public class AuthServer {
                     URLEncoder.encode(json.getString("error"), Charset.defaultCharset())));
             return;
         }
-        // extract the email from the JWT token
         String idToken = json.getString("id_token");
+        // Extract nonce from JWT body for CSR lookup (lookup key only — auth comes from tokeninfo below)
         var tokenParts = idToken.split("\\.");
-        var info = new JSONObject(new String(Base64.getUrlDecoder().decode(tokenParts[1])));
-        var email = info.getString("email");
-        var nonce = info.getString("nonce"); // use this to access csr
+        var rawPayload = new JSONObject(new String(Base64.getUrlDecoder().decode(tokenParts[1])));
+        var nonce = rawPayload.optString("nonce", "");
+        // Verify the id_token signature and claims via Google's tokeninfo endpoint
+        var tokenInfoCon = (HttpsURLConnection) new URL(
+                "https://oauth2.googleapis.com/tokeninfo?id_token=" +
+                URLEncoder.encode(idToken, Charset.defaultCharset())).openConnection();
+        var tokenInfoBaos = new ByteArrayOutputStream();
+        try (InputStream tis = tokenInfoCon.getResponseCode() < HTTP_BAD_REQUEST
+                ? tokenInfoCon.getInputStream() : tokenInfoCon.getErrorStream()) {
+            tis.transferTo(tokenInfoBaos);
+        }
+        var tokenInfo = new JSONObject(tokenInfoBaos.toString());
+        if (tokenInfo.has("error_description") || tokenInfo.has("error")) {
+            redirect(exchange, String.format("/login/error?error=%s",
+                    URLEncoder.encode("Token verification failed", Charset.defaultCharset())));
+            return;
+        }
+        if (!clientId.equals(tokenInfo.optString("aud"))) {
+            redirect(exchange, String.format("/login/error?error=%s",
+                    URLEncoder.encode("Token audience mismatch", Charset.defaultCharset())));
+            return;
+        }
+        if (!authDomain.isEmpty() && !authDomain.equals(tokenInfo.optString("hd", ""))) {
+            redirect(exchange, String.format("/login/error?error=%s",
+                    URLEncoder.encode("Unauthorized domain", Charset.defaultCharset())));
+            return;
+        }
+        var email = tokenInfo.getString("email");
         var nr = nonces.get(nonce);
         if (nr == null) {
             redirect(exchange, String.format("/login/error?error=%s",
@@ -581,10 +636,10 @@ public class AuthServer {
     public void downloadSigned(HttpExchange exchange) throws Exception {
         var email = extractParams(exchange).get("email");
         String getSigned = null;
-        //String query = "select signedCertificate from certificates where revoked = False and email = ?;";
-        try (Statement stmt = connection.createStatement()) {
-            boolean rc = stmt.execute(String.format(
-                    "select signedCertificate from certificate where revoked = False" + " and email = \"%s\";", email));
+        try (var stmt = connection.prepareStatement(
+                "select signedCertificate from certificate where revoked = False and email = ?;")) {
+            stmt.setString(1, email);
+            boolean rc = stmt.execute();
             if (rc) {
                 ResultSet rs = stmt.getResultSet();
                 if (rs.next()) {

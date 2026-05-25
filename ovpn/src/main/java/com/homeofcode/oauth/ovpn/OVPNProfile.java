@@ -1,6 +1,6 @@
 package com.homeofcode.oauth.ovpn;
 
-import org.bouncycastle.openssl.PKCS8Generator;
+import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
 import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
 import org.bouncycastle.openssl.jcajce.JcaPKCS8Generator;
 import org.bouncycastle.openssl.jcajce.JceOpenSSLPKCS8EncryptorBuilder;
@@ -14,6 +14,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.nio.file.Files;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.security.KeyPairGenerator;
 import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.Callable;
@@ -87,6 +88,10 @@ public class OVPNProfile {
                 throws NoSuchAlgorithmException, OperatorCreationException, IOException, InterruptedException {
 
             /* validate all the parameters first */
+            if (!email.matches("[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}")) {
+                error(String.format("Invalid email address: %s", email));
+                System.exit(2);
+            }
             if (!workingDirectory.isDirectory()) {
                 error(String.format("%s is not a valid working directory.", workingDirectory.getCanonicalPath()));
                 System.exit(2);
@@ -113,8 +118,9 @@ public class OVPNProfile {
             var pair = gen.generateKeyPair();
             Object privateKeyToEncode = pair.getPrivate();
             if (password != null) {
-                var privEncryptor = new JceOpenSSLPKCS8EncryptorBuilder(PKCS8Generator.PBE_SHA1_3DES).setPassword(
-                        password.toCharArray()).build();
+                var privEncryptor = new JceOpenSSLPKCS8EncryptorBuilder(PKCSObjectIdentifiers.id_PBES2)
+                        .setIterationCount(600000)
+                        .setPassword(password.toCharArray()).build();
                 privateKeyToEncode = new JcaPKCS8Generator(pair.getPrivate(), privEncryptor);
             }
             var privPem = new StringWriter();
@@ -132,6 +138,9 @@ public class OVPNProfile {
                 csrPemWriter.writeObject(csr);
             }
             Files.writeString(csrFile.toPath(), csrPem.toString());
+            try {
+                Files.setPosixFilePermissions(csrFile.toPath(), PosixFilePermissions.fromString("rw-------"));
+            } catch (UnsupportedOperationException ignored) {}
             info(String.format("Please go to %s to get the file %s signed and put the signed file in %s.", authUrl,
                     csrFile.getCanonicalPath(), signedFile.getCanonicalPath()));
             String waitingString = String.format("Waiting for %s  ", signedFile.getCanonicalPath());
@@ -147,6 +156,10 @@ public class OVPNProfile {
             //System.out.print("\b".repeat(waitingString.length()+1));
             System.out.printf("\b\u2705\n");
             System.out.flush();
+            try {
+                var perms = PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------"));
+                Files.createFile(ovpnFile.toPath(), perms);
+            } catch (UnsupportedOperationException ignored) {}
             Files.writeString(ovpnFile.toPath(),
                     ovpnTemplate.replace("SIGNEDCERT", Files.readString(signedFile.toPath()))
                             .replace("PRIVATEKEY", privPemString));

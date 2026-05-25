@@ -30,6 +30,9 @@ class WgControllerTest {
     @MockBean
     private CertificateService certificateService;
 
+    @MockBean
+    private WgKeymanConfig wgKeymanConfig;
+
     private OAuth2User createOAuth2User(String email, String name) {
         Map<String, Object> attributes = Map.of(
                 "email", email,

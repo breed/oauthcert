@@ -1,3 +1,9 @@
 # Project exclude paths
 /out/
 **/target
+
+# Prevent accidental commit of real private keys outside the test-e2e fixture directory.
+# test-e2e/ca.key and test-e2e/server.key are intentional test fixtures (see test-e2e/README.md).
+*.key
+!test-e2e/ca.key
+!test-e2e/server.key

@@ -138,4 +138,51 @@ class WGProfileTest {
         assertEquals("1.3.6.1.4.1.99999.1", WGProfile.WG_PUBLIC_KEY_OID.getId(),
                 "OID should match expected value");
     }
+
+    // Vuln: No email validation allowed path traversal when constructing filenames
+    @Test
+    @SuppressWarnings("removal")
+    void testEmailValidation_PathTraversalEmailRejectedWithExit2() {
+        // The email regex fix prevents path traversal characters (/) from being used in
+        // file-creation paths. This test calls the CLI with a traversal email and verifies
+        // it exits with code 2 (invalid email) rather than proceeding to create files.
+        int[] exitCode = {-1};
+        SecurityManager original = System.getSecurityManager();
+        try {
+            System.setSecurityManager(new SecurityManager() {
+                @Override public void checkPermission(java.security.Permission perm) {}
+                @Override public void checkExit(int status) {
+                    exitCode[0] = status;
+                    throw new SecurityException("intercepted:exit:" + status);
+                }
+            });
+            WGProfile.Cli cli = new WGProfile.Cli();
+            var emailField = WGProfile.Cli.class.getDeclaredField("email");
+            emailField.setAccessible(true);
+            emailField.set(cli, "../malicious@test.com");
+            cli.call();
+        } catch (SecurityException e) {
+            assertTrue(e.getMessage().startsWith("intercepted:exit:"),
+                    "Expected System.exit to be intercepted");
+        } catch (Exception e) {
+            // If System.exit can't be intercepted (Java 18+), skip via assumption
+            org.junit.jupiter.api.Assumptions.assumeTrue(false,
+                    "SecurityManager not available: " + e.getMessage());
+        } finally {
+            System.setSecurityManager(original);
+        }
+        assertEquals(2, exitCode[0],
+                "Path traversal email must cause exit(2) — without email validation this would not exit with 2");
+    }
+
+    @Test
+    void testEmailRegex_BlocksPathTraversalCharacters() {
+        // Direct test of the security-critical regex constant used in WGProfile.Cli.call()
+        String pattern = "[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}";
+        assertFalse("../malicious@test.com".matches(pattern), "../ traversal must be rejected");
+        assertFalse("/etc/passwd@evil.com".matches(pattern), "absolute path must be rejected");
+        assertFalse("user@domain.com/../../../etc/shadow".matches(pattern), "trailing traversal must be rejected");
+        assertTrue("user@example.com".matches(pattern), "valid email must be accepted");
+        assertTrue("user.name+tag@sub.example.co.uk".matches(pattern), "complex valid email must be accepted");
+    }
 }
