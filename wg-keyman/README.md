@@ -1,6 +1,56 @@
 This SpringBoot server will have a single page that users can upload their signed certificate files to.
 If the CN in the certificate matches the list of users, it will return a page with a valid wireguard configuration minus the private key.
 
+# Run modes
+
+The `wg-keyman` jar runs in one of two modes, selected by the first argument:
+
+- **Server mode**: `serve` as the first argument starts the Spring Boot web server described below.
+  The systemd unit (`wg-keyman.service`) is configured to pass `serve`.
+  ```bash
+  java -jar wg-keyman.jar serve
+  ```
+- **CLI mode**: any other first argument is an administrative subcommand, dispatched via PicoCLI
+  **without** booting Spring (no Tomcat, no OAuth). It reads the same configuration the server uses
+  (see [Administrative CLI](#administrative-cli)).
+- With **no arguments**, the CLI usage/help message is printed.
+  ```bash
+  java -jar wg-keyman.jar
+  ```
+
+# Administrative CLI
+
+CLI mode reuses the server's `application.properties` but does not start Spring. Configuration is
+resolved in this order: the `spring.config.location` system property, the `SPRING_CONFIG_LOCATION`
+environment variable (set by the systemd unit), `application.properties` in the working directory,
+then the in-jar defaults. Command output goes to stdout; diagnostics go to stderr (so `generate`
+output can be redirected to a file cleanly). Commands exit `0` on success, `1` on an operation
+error, and `2` on a usage error.
+
+```bash
+# Users (entries in users.lst)
+java -jar wg-keyman.jar user list
+java -jar wg-keyman.jar user add <HOST_NUMBER> <CN>     # HOST_NUMBER is decimal (IPv4) or hex (IPv6)
+java -jar wg-keyman.jar user remove <CN>
+
+# Peers (entries in the peers file)
+java -jar wg-keyman.jar peer list
+java -jar wg-keyman.jar peer remove <CN>                # removes the managed peer and syncs WireGuard
+java -jar wg-keyman.jar peer sync                        # reload the live interface from the peers file
+
+# Generate a client config without the web UI (printed to stdout, or -o <file>)
+java -jar wg-keyman.jar generate --cn <CN> --public-key <WG_PUBLIC_KEY>
+java -jar wg-keyman.jar generate --cert <signed-cert-file>
+```
+
+When run on the deployed server, invoke the CLI as the service user so it reads the deployment
+config and can write the managed files:
+
+```bash
+sudo -u wgkeyman SPRING_CONFIG_LOCATION=/opt/wg-keyman/application.properties \
+    java -jar /opt/wg-keyman/wg-keyman.jar user list
+```
+
 # HTTP endpoints
 
 - /x509 endpoints process X.509 certificates with the X.509 extension for the wireguard public key
