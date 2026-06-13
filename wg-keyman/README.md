@@ -37,7 +37,7 @@ java -jar wg-keyman.jar user remove <CN>
 # Peers (entries in the peers file)
 java -jar wg-keyman.jar peer list
 java -jar wg-keyman.jar peer remove <CN>                # removes the managed peer and syncs WireGuard
-java -jar wg-keyman.jar peer sync                        # reload the live interface from the peers file
+java -jar wg-keyman.jar peer sync                        # rebuild peers.conf from current state and reload WireGuard
 
 # Generate a client config without the web UI (printed to stdout, or -o <file>)
 java -jar wg-keyman.jar generate --cn <CN> --public-key <WG_PUBLIC_KEY>

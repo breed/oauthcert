@@ -123,6 +123,14 @@ class AdminCliTest {
     }
 
     @Test
+    void peerSyncRebuildsAndReloads() throws Exception {
+        // peers.conf starts present-but-empty in setUp; sync should rebuild it and reload.
+        assertEquals(0, AdminCli.run(new String[]{"peer", "sync"}));
+        assertTrue(stdout().contains("Rebuilt peers file"));
+        assertTrue(Files.exists(tempDir.resolve("peers.conf")));
+    }
+
+    @Test
     void unknownSubcommandReturnsUsageError() {
         assertEquals(2, AdminCli.run(new String[]{"bogus"}));
     }

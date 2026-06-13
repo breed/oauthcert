@@ -216,7 +216,8 @@ public class AdminCli implements Runnable {
         }
     }
 
-    @Command(name = "sync", description = "Reload the live WireGuard interface from the peers file.")
+    @Command(name = "sync",
+            description = "Rebuild the peers file from the current state (backing up the old one) and reload WireGuard.")
     static class PeerSyncCommand implements Callable<Integer> {
         private final CliContext ctx;
 
@@ -226,12 +227,12 @@ public class AdminCli implements Runnable {
 
         @Override
         public Integer call() {
-            String warning = ctx.service().sync();
+            String warning = ctx.service().save();
             if (warning != null) {
                 System.err.println("Warning: " + warning);
                 return 1;
             }
-            System.out.println("WireGuard configuration synced.");
+            System.out.println("Rebuilt peers file and synced WireGuard.");
             return 0;
         }
     }
