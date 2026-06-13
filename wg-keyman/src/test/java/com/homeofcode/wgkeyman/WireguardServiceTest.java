@@ -3,6 +3,9 @@ package com.homeofcode.wgkeyman;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Base64;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -12,9 +15,21 @@ class WireguardServiceTest {
     private WireguardService service;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
+        // The test config uses a shared temp peers file; start each test from a clean slate.
+        String tmp = System.getProperty("java.io.tmpdir");
+        Files.deleteIfExists(Path.of(tmp, "wg-keyman-test-peers.conf"));
+        Files.deleteIfExists(Path.of(tmp, "wg-keyman-test-peers.conf.old"));
         service = new WireguardService(
                 new TestWgKeymanConfig(Map.of("test@example.com", 5, "admin@example.com", 10)));
+    }
+
+    /** Build a distinct, valid 44-char WireGuard public key for the given seed. */
+    private static String key(int seed) {
+        byte[] b = new byte[32];
+        b[0] = (byte) seed;
+        b[31] = (byte) seed;
+        return Base64.getEncoder().encodeToString(b);
     }
 
     @Test
@@ -231,15 +246,48 @@ class WireguardServiceTest {
 
     @Test
     void testProcessPublicKey_MultipleUsersGetDifferentAddresses() {
-        String validPublicKey = "xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8HQ14=";
-
-        WireguardService.WireguardResult testResult = service.processPublicKey("test@example.com", validPublicKey);
+        // Distinct users must use distinct keys (keys are globally unique).
+        WireguardService.WireguardResult testResult = service.processPublicKey("test@example.com", key(11));
         assertTrue(testResult.valid());
         assertTrue(testResult.wireguardConfig().contains("Address = 10.0.0.5/32"));
 
-        WireguardService.WireguardResult adminResult = service.processPublicKey("admin@example.com", validPublicKey);
+        WireguardService.WireguardResult adminResult = service.processPublicKey("admin@example.com", key(12));
         assertTrue(adminResult.valid());
         assertTrue(adminResult.wireguardConfig().contains("Address = 10.0.0.10/32"));
+    }
+
+    @Test
+    void testProcessPublicKey_RejectsKeyUsedByAnotherUser() {
+        String k = key(201);
+        assertTrue(service.processPublicKey("test@example.com", k).valid());
+
+        WireguardService.WireguardResult result = service.processPublicKey("admin@example.com", k);
+        assertFalse(result.valid());
+        assertTrue(result.errorMessage().contains("already in use"));
+    }
+
+    @Test
+    void testProcessPublicKey_AllowsResubmittingOwnKey() {
+        String k = key(202);
+        assertTrue(service.processPublicKey("test@example.com", k).valid());
+        assertTrue(service.processPublicKey("test@example.com", k).valid());
+    }
+
+    @Test
+    void testProcessPublicKey_RejectsKeyUsedByPermanentPeer() {
+        String k = key(203);
+        service.addManualPeer(k, "10.0.0.40/32");
+
+        WireguardService.WireguardResult result = service.processPublicKey("test@example.com", k);
+        assertFalse(result.valid());
+        assertTrue(result.errorMessage().contains("already in use"));
+    }
+
+    @Test
+    void testAddManualPeer_RejectsKeyUsedByManagedUser() {
+        String k = key(204);
+        assertTrue(service.processPublicKey("admin@example.com", k).valid());
+        assertThrows(IllegalArgumentException.class, () -> service.addManualPeer(k, "10.0.0.41/32"));
     }
 
     /**

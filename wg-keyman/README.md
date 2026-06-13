@@ -65,6 +65,9 @@ sudo -u wgkeyman SPRING_CONFIG_LOCATION=/opt/wg-keyman/application.properties \
 
 # Wireguard configuration
 
+- public keys are globally unique: a key already registered to another user or to a permanent peer
+  is rejected (a user may re-submit their own current key). This applies to both the `/wg` submission
+  and the `permpeers add` command.
 - when a new public key is supplied for a user the wireguard configuration is updated
   - the user's IP address is constructed from the VPN network address and the users HOST_NUMBER
   - the user's IP address and public key is added to the wireguard configuration

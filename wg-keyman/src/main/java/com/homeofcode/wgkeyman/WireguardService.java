@@ -117,10 +117,8 @@ public class WireguardService {
         if (!allowedIps.matches("[0-9a-fA-F:.,/ ]+")) {
             throw new IllegalArgumentException("Invalid AllowedIPs: " + allowedIps);
         }
-        for (ManualPeer p : listManualPeers()) {
-            if (p.publicKey().equals(key)) {
-                throw new IllegalArgumentException("permanent peer already exists: " + key);
-            }
+        if (isPublicKeyInUse(key, null)) {
+            throw new IllegalArgumentException("public key already in use: " + key);
         }
         manualPeerSections.add("[Peer]\nPublicKey = " + key + "\nAllowedIPs = " + allowedIps.trim() + "\n");
     }
@@ -150,6 +148,25 @@ public class WireguardService {
     private static String valueAfterEquals(String line) {
         int eq = line.indexOf('=');
         return eq < 0 ? "" : line.substring(eq + 1).trim();
+    }
+
+    /**
+     * Whether {@code publicKey} is already registered to some peer — a managed peer other than
+     * {@code exceptCn} (pass {@code null} to consider all managed peers), or any permanent peer.
+     * Public keys must be globally unique so one key can't map to two peers.
+     */
+    public synchronized boolean isPublicKeyInUse(String publicKey, String exceptCn) {
+        for (Map.Entry<String, String> e : peers.entrySet()) {
+            if (e.getValue().equals(publicKey) && !e.getKey().equals(exceptCn)) {
+                return true;
+            }
+        }
+        for (ManualPeer p : listManualPeers()) {
+            if (p.publicKey().equals(publicKey)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -479,13 +496,17 @@ public class WireguardService {
         }
         publicKey = publicKey.trim();
 
-        // Generate config
-        String wgConfig = generateWireguardConfig(email, publicKey);
-
-        // Atomically register the peer and persist. peers is shared across request threads, so the
-        // mutation and the (synchronized) save must happen under the same lock.
+        // Atomically enforce key uniqueness, register the peer, and persist. peers is shared across
+        // request threads, so the check, mutation, and (synchronized) save happen under one lock.
+        String wgConfig;
         String warning;
         synchronized (this) {
+            // A user may re-submit their own current key, but a key already used by another user or
+            // a permanent peer is rejected (one key -> at most one peer).
+            if (isPublicKeyInUse(publicKey, email)) {
+                return WireguardResult.error("That public key is already in use by another peer.");
+            }
+            wgConfig = generateWireguardConfig(email, publicKey);
             peers.put(email, publicKey);
             warning = savePeers();
         }
