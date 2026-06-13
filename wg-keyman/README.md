@@ -34,10 +34,15 @@ java -jar wg-keyman.jar user list
 java -jar wg-keyman.jar user add <HOST_NUMBER> <CN>     # HOST_NUMBER is decimal (IPv4) or hex (IPv6)
 java -jar wg-keyman.jar user remove <CN>
 
-# Peers (entries in the peers file)
+# OAuth-registered peers (managed entries in the peers file)
 java -jar wg-keyman.jar peer list
 java -jar wg-keyman.jar peer remove <CN>                # removes the managed peer and syncs WireGuard
 java -jar wg-keyman.jar peer sync                        # rebuild peers.conf from current state and reload WireGuard
+
+# Permanent peers (manually-maintained, non-OAuth [Peer] sections)
+java -jar wg-keyman.jar permpeers list
+java -jar wg-keyman.jar permpeers add <PUBLIC_KEY> <ALLOWED_IPS>
+java -jar wg-keyman.jar permpeers remove <PUBLIC_KEY>
 
 # Print a user's client config using their registered key (stdout, or -o <file>)
 java -jar wg-keyman.jar generate <CN>

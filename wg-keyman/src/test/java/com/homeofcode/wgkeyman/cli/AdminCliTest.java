@@ -141,6 +141,33 @@ class AdminCliTest {
     }
 
     @Test
+    void permPeersAddListRemove() {
+        String key = "xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8HQ14=";
+
+        assertEquals(0, AdminCli.run(new String[]{"permpeers", "add", key, "10.0.0.50/32"}));
+        captured.reset();
+        assertEquals(0, AdminCli.run(new String[]{"permpeers", "list"}));
+        assertTrue(stdout().contains(key), stdout());
+
+        captured.reset();
+        assertEquals(0, AdminCli.run(new String[]{"permpeers", "remove", key}));
+        captured.reset();
+        assertEquals(0, AdminCli.run(new String[]{"permpeers", "list"}));
+        assertTrue(stdout().contains("no permanent peers"), stdout());
+    }
+
+    @Test
+    void permPeersAddRejectsInvalidKey() {
+        assertEquals(1, AdminCli.run(new String[]{"permpeers", "add", "bogus", "10.0.0.50/32"}));
+    }
+
+    @Test
+    void permPeersRemoveUnknownReturnsError() {
+        assertEquals(1, AdminCli.run(new String[]{
+                "permpeers", "remove", "xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8HQ14="}));
+    }
+
+    @Test
     void unknownSubcommandReturnsUsageError() {
         assertEquals(2, AdminCli.run(new String[]{"bogus"}));
     }

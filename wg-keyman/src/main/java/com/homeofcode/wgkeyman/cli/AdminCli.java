@@ -55,11 +55,19 @@ public class AdminCli implements Runnable {
                 .addSubcommand("list", new PeerListCommand(ctx))
                 .addSubcommand("remove", new PeerRemoveCommand(ctx))
                 .addSubcommand("sync", new PeerSyncCommand(ctx));
-        peer.getCommandSpec().usageMessage().description("Manage WireGuard peers in the peers file.");
+        peer.getCommandSpec().usageMessage().description("Manage OAuth-registered WireGuard peers in the peers file.");
+
+        CommandLine permpeers = new CommandLine(new GroupCommand())
+                .addSubcommand("list", new PermPeerListCommand(ctx))
+                .addSubcommand("add", new PermPeerAddCommand(ctx))
+                .addSubcommand("remove", new PermPeerRemoveCommand(ctx));
+        permpeers.getCommandSpec().usageMessage()
+                .description("Manage permanent (manually-maintained, non-OAuth) WireGuard peers.");
 
         CommandLine root = new CommandLine(new AdminCli())
                 .addSubcommand("user", user)
                 .addSubcommand("peer", peer)
+                .addSubcommand("permpeers", permpeers)
                 .addSubcommand("generate", new GenerateCommand(ctx));
 
         return root.execute(args);
@@ -233,6 +241,92 @@ public class AdminCli implements Runnable {
                 return 1;
             }
             System.out.println("Rebuilt peers file and synced WireGuard.");
+            return 0;
+        }
+    }
+
+    // ------------------------------------------------------------------------------ permpeers ---
+
+    @Command(name = "list", description = "List permanent peers (public key and allowed IPs).")
+    static class PermPeerListCommand implements Callable<Integer> {
+        private final CliContext ctx;
+
+        PermPeerListCommand(CliContext ctx) {
+            this.ctx = ctx;
+        }
+
+        @Override
+        public Integer call() {
+            List<WireguardService.ManualPeer> peers = ctx.service().listManualPeers();
+            if (peers.isEmpty()) {
+                System.out.println("(no permanent peers)");
+                return 0;
+            }
+            for (WireguardService.ManualPeer p : peers) {
+                System.out.printf("%-46s %s%n", p.publicKey(), p.allowedIps());
+            }
+            return 0;
+        }
+    }
+
+    @Command(name = "add", description = "Add a permanent peer and sync WireGuard.")
+    static class PermPeerAddCommand implements Callable<Integer> {
+        private final CliContext ctx;
+
+        @Parameters(index = "0", paramLabel = "PUBLIC_KEY", description = "WireGuard public key of the peer.")
+        String publicKey;
+
+        @Parameters(index = "1", paramLabel = "ALLOWED_IPS",
+                description = "AllowedIPs for the peer (e.g. fddd:277::5/128 or 10.0.0.5/32).")
+        String allowedIps;
+
+        PermPeerAddCommand(CliContext ctx) {
+            this.ctx = ctx;
+        }
+
+        @Override
+        public Integer call() {
+            WireguardService service = ctx.service();
+            try {
+                service.addManualPeer(publicKey, allowedIps);
+            } catch (IllegalArgumentException e) {
+                System.err.println(e.getMessage());
+                return 1;
+            }
+            String warning = service.save();
+            System.out.println("Added permanent peer " + publicKey.trim() + ".");
+            if (warning != null) {
+                System.err.println("Warning: " + warning);
+                return 1;
+            }
+            return 0;
+        }
+    }
+
+    @Command(name = "remove", description = "Remove a permanent peer (by public key) and sync WireGuard.")
+    static class PermPeerRemoveCommand implements Callable<Integer> {
+        private final CliContext ctx;
+
+        @Parameters(index = "0", paramLabel = "PUBLIC_KEY", description = "Public key of the peer to remove.")
+        String publicKey;
+
+        PermPeerRemoveCommand(CliContext ctx) {
+            this.ctx = ctx;
+        }
+
+        @Override
+        public Integer call() {
+            WireguardService service = ctx.service();
+            if (!service.removeManualPeer(publicKey)) {
+                System.err.println("No such permanent peer: " + publicKey);
+                return 1;
+            }
+            String warning = service.save();
+            System.out.println("Removed permanent peer " + publicKey.trim() + ".");
+            if (warning != null) {
+                System.err.println("Warning: " + warning);
+                return 1;
+            }
             return 0;
         }
     }

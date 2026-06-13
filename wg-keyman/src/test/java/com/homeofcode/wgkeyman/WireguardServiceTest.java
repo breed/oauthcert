@@ -102,6 +102,30 @@ class WireguardServiceTest {
         assertFalse(service.listPeers().containsKey("injected@example.com"));
     }
 
+    // Permanent (manual) peers
+
+    @Test
+    void testManualPeerAddListRemove() {
+        String key = "xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8HQ14=";
+        service.addManualPeer(key, "10.9.9.9/32");
+        assertTrue(service.listManualPeers().stream().anyMatch(p -> p.publicKey().equals(key)));
+
+        assertTrue(service.removeManualPeer(key));
+        assertFalse(service.listManualPeers().stream().anyMatch(p -> p.publicKey().equals(key)));
+        assertFalse(service.removeManualPeer(key)); // already gone
+    }
+
+    @Test
+    void testAddManualPeerRejectsInvalidKey() {
+        assertThrows(IllegalArgumentException.class, () -> service.addManualPeer("tooshort", "10.0.0.9/32"));
+    }
+
+    @Test
+    void testAddManualPeerRejectsAllowedIpsInjection() {
+        String key = "xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8HQ14=";
+        assertThrows(IllegalArgumentException.class, () -> service.addManualPeer(key, "10.0.0.9/32\n[Peer]"));
+    }
+
     @Test
     void testProcessPublicKey_EmptyPublicKey() {
         WireguardService.WireguardResult result = service.processPublicKey("test@example.com", "");
