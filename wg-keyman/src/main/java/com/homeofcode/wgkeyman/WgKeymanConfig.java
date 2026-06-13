@@ -14,6 +14,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 
 @Configuration
 public class WgKeymanConfig {
@@ -58,11 +59,41 @@ public class WgKeymanConfig {
     // Protected constructor for test subclasses
     protected WgKeymanConfig() {}
 
+    /**
+     * Build a config instance from a plain {@link Properties} bag instead of Spring's
+     * {@code @Value} injection. Used by the administrative CLI, which loads the same
+     * {@code application.properties} the server uses but does not boot Spring.
+     *
+     * <p>Defaults mirror the {@code @Value} defaults declared on the fields above. The same
+     * {@link #init()} validation runs, so missing/invalid configuration fails fast.
+     */
+    public static WgKeymanConfig fromProperties(Properties props) {
+        WgKeymanConfig c = new WgKeymanConfig();
+        c.serverAddress = props.getProperty("wgmgr.server", "");
+        c.network = props.getProperty("wgmgr.network", "");
+        c.serverEndpoint = props.getProperty("wgmgr.server-endpoint", "");
+        c.serverPublicKey = props.getProperty("wgmgr.server-public-key", "");
+        c.caCertPath = props.getProperty("wgmgr.ca-cert", "");
+        c.usersFilePath = props.getProperty("wgmgr.users-file", "");
+        c.certDatesFile = props.getProperty("wgmgr.cert-dates-file", "cert-dates.dat");
+        c.peersFile = props.getProperty("wgmgr.peers-file", "peers.conf");
+        c.wgInterface = props.getProperty("wgmgr.interface", "wg0");
+        c.syncCommand = props.getProperty("wgmgr.sync-command", "");
+        c.x509Enabled = Boolean.parseBoolean(props.getProperty("wgmgr.x509-enabled", "false"));
+        c.init();
+        return c;
+    }
+
     @PostConstruct
     public void init() {
         validateConfiguration();
         loadCaCert();
         loadUsers();
+    }
+
+    /** Whether the configured VPN network is IPv6 (host numbers in users.lst are hex). */
+    public boolean isNetworkIPv6() {
+        return isIPv6(network.split("/")[0]);
     }
 
     private void validateConfiguration() {
@@ -241,6 +272,10 @@ public class WgKeymanConfig {
     public Map<String, Integer> getUserHostNumbers() {
         reloadUsersIfChanged();
         return userHostNumbers;
+    }
+
+    public String getUsersFile() {
+        return usersFilePath;
     }
 
     public String getCertDatesFile() {

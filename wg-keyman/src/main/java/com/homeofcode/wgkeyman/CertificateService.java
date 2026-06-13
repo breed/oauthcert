@@ -46,10 +46,47 @@ public class CertificateService {
     private final Map<String, String> peers = new LinkedHashMap<>();
 
     public CertificateService(WgKeymanConfig config) {
+        this(config, true);
+    }
+
+    /**
+     * @param syncOnStartup whether to reload the live WireGuard interface immediately. The web
+     *        server passes {@code true} so the running interface reflects the persisted peers.
+     *        The admin CLI passes {@code false} so read-only commands (e.g. {@code peer list},
+     *        {@code generate}) never touch the live interface.
+     */
+    public CertificateService(WgKeymanConfig config, boolean syncOnStartup) {
         this.config = config;
         loadCertDates();
         loadPeers();
-        syncWireguardConfig();
+        if (syncOnStartup) {
+            syncWireguardConfig();
+        }
+    }
+
+    /**
+     * Return the currently-tracked wg-keyman managed peers (CN -&gt; public key), in file order.
+     */
+    public Map<String, String> listPeers() {
+        return new LinkedHashMap<>(peers);
+    }
+
+    /**
+     * Remove a managed peer by CN. Returns {@code true} if a peer was removed (the caller should
+     * then call {@link #save()} to persist and sync), {@code false} if no such peer existed.
+     */
+    public boolean removePeer(String cn) {
+        return peers.remove(cn) != null;
+    }
+
+    /** Persist the current peers to the peers file and sync WireGuard. Returns a warning or null. */
+    public String save() {
+        return savePeers();
+    }
+
+    /** Reload the live WireGuard interface from the peers file. Returns a warning or null. */
+    public String sync() {
+        return syncWireguardConfig();
     }
 
     private Path getCertDatesPath() {

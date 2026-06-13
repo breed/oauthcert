@@ -7,7 +7,8 @@ Type=simple
 User=wgkeyman
 Group=wgkeyman
 WorkingDirectory=/opt/wg-keyman
-ExecStart=/usr/bin/java -jar /opt/wg-keyman/wg-keyman.jar
+# 'serve' selects server mode; without it the jar prints CLI usage and exits.
+ExecStart=/usr/bin/java -jar /opt/wg-keyman/wg-keyman.jar serve
 Restart=on-failure
 RestartSec=10
 
