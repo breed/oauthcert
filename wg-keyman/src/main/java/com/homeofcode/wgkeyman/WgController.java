@@ -18,10 +18,10 @@ import java.nio.charset.StandardCharsets;
 @RequestMapping("/wg")
 public class WgController {
 
-    private final CertificateService certificateService;
+    private final WireguardService wireguardService;
 
-    public WgController(CertificateService certificateService) {
-        this.certificateService = certificateService;
+    public WgController(WireguardService wireguardService) {
+        this.wireguardService = wireguardService;
     }
 
     @GetMapping("/")
@@ -31,7 +31,7 @@ public class WgController {
         model.addAttribute("email", email);
         model.addAttribute("name", name);
 
-        if (!certificateService.isAuthorizedUser(email)) {
+        if (!wireguardService.isAuthorizedUser(email)) {
             return "wg-unauthorized";
         }
 
@@ -44,7 +44,7 @@ public class WgController {
                                    Model model) {
         String email = principal.getAttribute("email");
 
-        CertificateService.CertificateResult result = certificateService.processPublicKey(email, publicKey);
+        WireguardService.WireguardResult result = wireguardService.processPublicKey(email, publicKey);
 
         if (!result.valid()) {
             model.addAttribute("error", result.errorMessage());

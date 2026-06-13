@@ -1,7 +1,7 @@
 package com.homeofcode.wgkeyman.cli;
 
-import com.homeofcode.wgkeyman.CertificateService;
 import com.homeofcode.wgkeyman.WgKeymanConfig;
+import com.homeofcode.wgkeyman.WireguardService;
 
 /**
  * Shared, lazily-initialised access to configuration and services for the admin CLI. Building the
@@ -28,9 +28,9 @@ public class CliContext {
         return config;
     }
 
-    /** A CertificateService that does NOT reload the live interface on construction. */
-    public CertificateService service() {
-        return new CertificateService(config(), false);
+    /** A WireguardService that does NOT reload the live interface on construction. */
+    public WireguardService service() {
+        return new WireguardService(config(), false);
     }
 
     public UsersFile usersFile() {

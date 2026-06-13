@@ -1,13 +1,9 @@
 package com.homeofcode.wgkeyman;
 
-import org.bouncycastle.cert.X509CertificateHolder;
-import org.bouncycastle.openssl.PEMParser;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import jakarta.annotation.PostConstruct;
-import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,14 +27,8 @@ public class WgKeymanConfig {
     @Value("${wgmgr.server-public-key:}")
     private String serverPublicKey;
 
-    @Value("${wgmgr.ca-cert:}")
-    private String caCertPath;
-
     @Value("${wgmgr.users-file:}")
     private String usersFilePath;
-
-    @Value("${wgmgr.cert-dates-file:cert-dates.dat}")
-    private String certDatesFile;
 
     @Value("${wgmgr.peers-file:peers.conf}")
     private String peersFile;
@@ -49,10 +39,6 @@ public class WgKeymanConfig {
     @Value("${wgmgr.sync-command:}")
     private String syncCommand;
 
-    @Value("${wgmgr.x509-enabled:false}")
-    private boolean x509Enabled;
-
-    private X509CertificateHolder caCert;
     private volatile Map<String, Integer> userHostNumbers = new HashMap<>();
     private volatile FileTime usersFileLastModified;
 
@@ -73,13 +59,10 @@ public class WgKeymanConfig {
         c.network = props.getProperty("wgmgr.network", "");
         c.serverEndpoint = props.getProperty("wgmgr.server-endpoint", "");
         c.serverPublicKey = props.getProperty("wgmgr.server-public-key", "");
-        c.caCertPath = props.getProperty("wgmgr.ca-cert", "");
         c.usersFilePath = props.getProperty("wgmgr.users-file", "");
-        c.certDatesFile = props.getProperty("wgmgr.cert-dates-file", "cert-dates.dat");
         c.peersFile = props.getProperty("wgmgr.peers-file", "peers.conf");
         c.wgInterface = props.getProperty("wgmgr.interface", "wg0");
         c.syncCommand = props.getProperty("wgmgr.sync-command", "");
-        c.x509Enabled = Boolean.parseBoolean(props.getProperty("wgmgr.x509-enabled", "false"));
         c.init();
         return c;
     }
@@ -87,7 +70,6 @@ public class WgKeymanConfig {
     @PostConstruct
     public void init() {
         validateConfiguration();
-        loadCaCert();
         loadUsers();
     }
 
@@ -113,12 +95,6 @@ public class WgKeymanConfig {
 
         if (isBlank(serverPublicKey)) {
             exitWithError("wgmgr.server-public-key is not defined. Set the WireGuard server's public key.");
-        }
-
-        if (isBlank(caCertPath)) {
-            exitWithError("wgmgr.ca-cert is not defined. Set the path to the CA certificate file.");
-        } else if (!Files.exists(Path.of(caCertPath))) {
-            exitWithError("CA certificate file not found: " + caCertPath);
         }
 
         if (isBlank(usersFilePath)) {
@@ -168,18 +144,6 @@ public class WgKeymanConfig {
 
     private boolean isIPv6(String ip) {
         return ip.contains(":");
-    }
-
-    private void loadCaCert() {
-        try (var reader = new FileReader(caCertPath);
-             var pemParser = new PEMParser(reader)) {
-            caCert = (X509CertificateHolder) pemParser.readObject();
-            if (caCert == null) {
-                exitWithError("Could not parse CA certificate from: " + caCertPath);
-            }
-        } catch (IOException e) {
-            exitWithError("Could not read CA certificate file: " + e.getMessage());
-        }
     }
 
     private synchronized void loadUsers() {
@@ -265,10 +229,6 @@ public class WgKeymanConfig {
         return serverPublicKey;
     }
 
-    public X509CertificateHolder getCaCert() {
-        return caCert;
-    }
-
     public Map<String, Integer> getUserHostNumbers() {
         reloadUsersIfChanged();
         return userHostNumbers;
@@ -276,10 +236,6 @@ public class WgKeymanConfig {
 
     public String getUsersFile() {
         return usersFilePath;
-    }
-
-    public String getCertDatesFile() {
-        return certDatesFile;
     }
 
     public String getPeersFile() {
@@ -292,10 +248,6 @@ public class WgKeymanConfig {
 
     public String getSyncCommand() {
         return syncCommand;
-    }
-
-    public boolean isX509Enabled() {
-        return x509Enabled;
     }
 
     /**

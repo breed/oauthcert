@@ -1,8 +1,6 @@
 package com.homeofcode.wgkeyman.cli;
 
-import com.homeofcode.wgkeyman.CertificateService;
-
-import org.bouncycastle.cert.X509CertificateHolder;
+import com.homeofcode.wgkeyman.WireguardService;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -27,7 +25,6 @@ import picocli.CommandLine.Parameters;
  *   wg-keyman peer remove &lt;cn&gt;
  *   wg-keyman peer sync
  *   wg-keyman generate --cn &lt;cn&gt; --public-key &lt;key&gt;
- *   wg-keyman generate --cert &lt;file&gt;
  * </pre>
  */
 @Command(name = "wg-keyman",
@@ -204,7 +201,7 @@ public class AdminCli implements Runnable {
 
         @Override
         public Integer call() {
-            CertificateService service = ctx.service();
+            WireguardService service = ctx.service();
             if (!service.removePeer(cn)) {
                 System.err.println("No such managed peer: " + cn);
                 return 1;
@@ -243,18 +240,15 @@ public class AdminCli implements Runnable {
 
     @Command(name = "generate",
             description = "Generate a WireGuard client config (printed to stdout) without the web UI. "
-                    + "Provide either --cn and --public-key, or --cert.")
+                    + "Provide --cn and --public-key.")
     static class GenerateCommand implements Callable<Integer> {
         private final CliContext ctx;
 
-        @Option(names = "--cn", description = "Common name / email of the user (with --public-key).")
+        @Option(names = "--cn", required = true, description = "Common name / email of the user.")
         String cn;
 
-        @Option(names = "--public-key", description = "WireGuard public key for the user (with --cn).")
+        @Option(names = "--public-key", required = true, description = "WireGuard public key for the user.")
         String publicKey;
-
-        @Option(names = "--cert", description = "Path to a signed certificate file to derive CN and public key from.")
-        Path cert;
 
         @Option(names = {"-o", "--output"}, description = "Write the config to this file instead of stdout.")
         Path output;
@@ -265,42 +259,9 @@ public class AdminCli implements Runnable {
 
         @Override
         public Integer call() throws Exception {
-            CertificateService service = ctx.service();
-            String resolvedCn;
-            String resolvedKey;
-
-            if (cert != null) {
-                if (cn != null || publicKey != null) {
-                    System.err.println("Provide either --cert, or --cn and --public-key, not both.");
-                    return 2;
-                }
-                if (!Files.isRegularFile(cert)) {
-                    System.err.println("Certificate file not found: " + cert);
-                    return 2;
-                }
-                X509CertificateHolder holder = service.parseCertificate(Files.readString(cert));
-                if (!service.validateCertificate(holder)) {
-                    System.err.println("Certificate was not signed by the trusted CA (or is expired).");
-                    return 1;
-                }
-                resolvedCn = service.extractCommonName(holder);
-                resolvedKey = service.extractWireguardPublicKey(holder);
-                if (resolvedCn == null) {
-                    System.err.println("Certificate does not contain a Common Name.");
-                    return 1;
-                }
-                if (resolvedKey == null) {
-                    System.err.println("Certificate does not contain a valid WireGuard public key extension.");
-                    return 1;
-                }
-            } else {
-                if (cn == null || publicKey == null) {
-                    System.err.println("Provide both --cn and --public-key (or use --cert).");
-                    return 2;
-                }
-                resolvedCn = cn;
-                resolvedKey = publicKey.trim();
-            }
+            WireguardService service = ctx.service();
+            String resolvedCn = cn;
+            String resolvedKey = publicKey.trim();
 
             String keyError = service.validateWireguardPublicKey(resolvedKey);
             if (keyError != null) {

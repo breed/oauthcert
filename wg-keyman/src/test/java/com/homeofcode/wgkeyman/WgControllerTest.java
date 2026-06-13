@@ -28,7 +28,7 @@ class WgControllerTest {
     private MockMvc mockMvc;
 
     @MockBean
-    private CertificateService certificateService;
+    private WireguardService wireguardService;
 
     @MockBean
     private WgKeymanConfig wgKeymanConfig;
@@ -48,7 +48,7 @@ class WgControllerTest {
 
     @Test
     void testIndex_AuthorizedUser_ReturnsUploadPage() throws Exception {
-        when(certificateService.isAuthorizedUser("test@example.com")).thenReturn(true);
+        when(wireguardService.isAuthorizedUser("test@example.com")).thenReturn(true);
 
         mockMvc.perform(get("/wg/")
                         .with(oauth2Login().oauth2User(createOAuth2User("test@example.com", "Test User"))))
@@ -60,7 +60,7 @@ class WgControllerTest {
 
     @Test
     void testIndex_UnauthorizedUser_ReturnsUnauthorizedPage() throws Exception {
-        when(certificateService.isAuthorizedUser("unknown@example.com")).thenReturn(false);
+        when(wireguardService.isAuthorizedUser("unknown@example.com")).thenReturn(false);
 
         mockMvc.perform(get("/wg/")
                         .with(oauth2Login().oauth2User(createOAuth2User("unknown@example.com", "Unknown User"))))
@@ -82,8 +82,8 @@ class WgControllerTest {
         String publicKey = "xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8HQ14=";
         String config = "[Interface]\nAddress = 10.0.0.5/32\n";
 
-        when(certificateService.processPublicKey(email, publicKey))
-                .thenReturn(CertificateService.CertificateResult.success(email, publicKey, config));
+        when(wireguardService.processPublicKey(email, publicKey))
+                .thenReturn(WireguardService.WireguardResult.success(email, publicKey, config));
 
         mockMvc.perform(post("/wg/submit")
                         .with(oauth2Login().oauth2User(createOAuth2User(email, "Test User")))
@@ -101,8 +101,8 @@ class WgControllerTest {
         String email = "unauthorized@example.com";
         String publicKey = "xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8HQ14=";
 
-        when(certificateService.processPublicKey(email, publicKey))
-                .thenReturn(CertificateService.CertificateResult.error("User 'unauthorized@example.com' is not authorized"));
+        when(wireguardService.processPublicKey(email, publicKey))
+                .thenReturn(WireguardService.WireguardResult.error("User 'unauthorized@example.com' is not authorized"));
 
         mockMvc.perform(post("/wg/submit")
                         .with(oauth2Login().oauth2User(createOAuth2User(email, "Unauthorized User")))
@@ -119,8 +119,8 @@ class WgControllerTest {
         String email = "test@example.com";
         String invalidKey = "invalid";
 
-        when(certificateService.processPublicKey(email, invalidKey))
-                .thenReturn(CertificateService.CertificateResult.error("Invalid WireGuard public key format"));
+        when(wireguardService.processPublicKey(email, invalidKey))
+                .thenReturn(WireguardService.WireguardResult.error("Invalid WireGuard public key format"));
 
         mockMvc.perform(post("/wg/submit")
                         .with(oauth2Login().oauth2User(createOAuth2User(email, "Test User")))

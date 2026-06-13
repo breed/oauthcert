@@ -1,5 +1,6 @@
-This SpringBoot server will have a single page that users can upload their signed certificate files to.
-If the CN in the certificate matches the list of users, it will return a page with a valid wireguard configuration minus the private key.
+This SpringBoot server authenticates users with OAuth and lets them submit a WireGuard public key.
+If the authenticated user's email matches the list of users, it returns a valid wireguard
+configuration (minus the private key) and registers the user's public key as a peer.
 
 # Run modes
 
@@ -40,7 +41,6 @@ java -jar wg-keyman.jar peer sync                        # reload the live inter
 
 # Generate a client config without the web UI (printed to stdout, or -o <file>)
 java -jar wg-keyman.jar generate --cn <CN> --public-key <WG_PUBLIC_KEY>
-java -jar wg-keyman.jar generate --cert <signed-cert-file>
 ```
 
 When run on the deployed server, invoke the CLI as the service user so it reads the deployment
@@ -53,9 +53,6 @@ sudo -u wgkeyman SPRING_CONFIG_LOCATION=/opt/wg-keyman/application.properties \
 
 # HTTP endpoints
 
-- /x509 endpoints process X.509 certificates with the X.509 extension for the wireguard public key
-  - matches the CN from the X.509 certificate with the user list
-  - adds the public key to the wireguard config using the address from the user list and the public key from the certificate
 - /wg endpoints do the following
   - use oauth to authenticate the client
   - matches the client id with the user list
@@ -69,29 +66,9 @@ sudo -u wgkeyman SPRING_CONFIG_LOCATION=/opt/wg-keyman/application.properties \
   - a comment is added to the configuration indicating
     - the user's name
     - the date it was added
-    - the issue date of the certificate if X.509 was used
 - if an existing configuration is being changed, the old configuration should be written to the configuration file with a .old extension.
   - the entries of the old configuration should be commented out
   - a comment will be added an entry indicating when it was added to the old configuration
-
-# Wireguard Public Key Extraction
-
-The server extracts the client's wireguard public key from an X.509 extension in the uploaded certificate.
-
-| Field | Value |
-|-------|-------|
-| OID | `1.3.6.1.4.1.99999.1` |
-| Critical | No |
-| Value | 32-byte Curve25519 public key (DER OCTET STRING) |
-
-To extract using BouncyCastle:
-
-```java
-X509CertificateHolder cert = // load certificate
-Extension ext = cert.getExtension(new ASN1ObjectIdentifier("1.3.6.1.4.1.99999.1"));
-byte[] wgPublicKey = ext.getExtnValue().getOctets();
-String base64Key = Base64.getEncoder().encodeToString(wgPublicKey);
-```
 
 # SpringBoot variables
 
@@ -99,16 +76,13 @@ String base64Key = Base64.getEncoder().encodeToString(wgPublicKey);
 - wgmgr.network: the VPN network address
 - wgmgr.server-endpoint: the host:port of the internet address of the wireguard server
 - wgmgr.server-public-key: the WireGuard server's public key
-- wgmgr.ca-cert: path to CA certificate for validating X.509 certificates
 - wgmgr.users-file: path to users list file (reloaded automatically when changed)
 - wgmgr.peers-file: path to WireGuard peers config file (default: peers.conf)
 - wgmgr.interface: WireGuard interface name (default: wg0)
 - wgmgr.sync-command: custom sync command (default: `sudo systemctl reload wg-quick@<interface>`)
-- wgmgr.x509-enabled: enable X.509 certificate upload endpoint (default: false)
 
 # Important files
 
-- ca.cert: certificate file for validating uploaded certificates.
 - users.lst: List of valid common names mapped to addresses
 
 # users.lst file format
@@ -138,7 +112,6 @@ sudo useradd -r -s /bin/false wgkeyman
 sudo mkdir -p /opt/wg-keyman
 sudo cp wg-keyman-*.jar /opt/wg-keyman/wg-keyman.jar
 sudo cp application.properties /opt/wg-keyman/
-sudo cp ca.crt /opt/wg-keyman/
 sudo cp users.lst /opt/wg-keyman/
 sudo chown -R wgkeyman:wgkeyman /opt/wg-keyman
 ```
