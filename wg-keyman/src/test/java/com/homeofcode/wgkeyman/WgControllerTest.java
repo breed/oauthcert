@@ -149,27 +149,71 @@ class WgControllerTest {
     }
 
     @Test
-    void testDownload_ReturnsConfigFile() throws Exception {
-        String config = "[Interface]\nAddress = 10.0.0.5/32\n";
+    void testDownload_RegeneratesConfigServerSide() throws Exception {
         String cn = "test@example.com";
+        String publicKey = "xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8HQ14=";
+        String config = "[Interface]\nAddress = 10.0.0.5/32\n";
+
+        when(wireguardService.isAuthorizedUser(cn)).thenReturn(true);
+        when(wireguardService.getPeerPublicKey(cn)).thenReturn(publicKey);
+        when(wireguardService.generateWireguardConfig(cn, publicKey)).thenReturn(config);
 
         mockMvc.perform(post("/wg/download")
                         .with(oauth2Login().oauth2User(createOAuth2User(cn, "Test User")))
-                        .with(csrf())
-                        .param("config", config)
-                        .param("cn", cn))
+                        .with(csrf()))
                 .andExpect(status().isOk())
-                .andExpect(header().string("Content-Disposition", "attachment; filename=\"test_at_example.com.conf\""))
+                // filename is derived from the principal and sanitized (no raw '@', no quotes)
+                .andExpect(header().string("Content-Disposition", "attachment; filename=\"test_example.com.conf\""))
                 .andExpect(content().contentType("text/plain"))
                 .andExpect(content().string(config));
     }
 
     @Test
+    void testDownload_NoRegisteredKey_ReturnsNotFound() throws Exception {
+        String cn = "test@example.com";
+        when(wireguardService.isAuthorizedUser(cn)).thenReturn(true);
+        when(wireguardService.getPeerPublicKey(cn)).thenReturn(null);
+
+        mockMvc.perform(post("/wg/download")
+                        .with(oauth2Login().oauth2User(createOAuth2User(cn, "Test User")))
+                        .with(csrf()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void testDownload_UnauthorizedUser_Forbidden() throws Exception {
+        String cn = "unknown@example.com";
+        when(wireguardService.isAuthorizedUser(cn)).thenReturn(false);
+
+        mockMvc.perform(post("/wg/download")
+                        .with(oauth2Login().oauth2User(createOAuth2User(cn, "Unknown")))
+                        .with(csrf()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void testDownload_Unauthenticated_RedirectsToLogin() throws Exception {
         mockMvc.perform(post("/wg/download")
-                        .with(csrf())
-                        .param("config", "test")
-                        .param("cn", "test@example.com"))
+                        .with(csrf()))
                 .andExpect(status().is3xxRedirection());
+    }
+
+    @Test
+    void testIndex_UnverifiedEmail_ReturnsUnauthorized() throws Exception {
+        // An unverified email is rejected before authorization is even checked.
+        mockMvc.perform(get("/wg/")
+                        .with(oauth2Login().oauth2User(createOAuth2UserUnverified("test@example.com", "Test User"))))
+                .andExpect(status().isOk())
+                .andExpect(view().name("wg-unauthorized"));
+    }
+
+    private OAuth2User createOAuth2UserUnverified(String email, String name) {
+        Map<String, Object> attributes = Map.of(
+                "email", email,
+                "name", name,
+                "email_verified", false,
+                "sub", "12345"
+        );
+        return new DefaultOAuth2User(Collections.emptyList(), attributes, "sub");
     }
 }

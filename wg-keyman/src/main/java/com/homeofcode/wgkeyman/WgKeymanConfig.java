@@ -260,11 +260,19 @@ public class WgKeymanConfig {
         String baseIp = networkParts[0];
 
         if (isIPv6(baseIp)) {
+            if (hostNumber < 1) {
+                throw new IllegalArgumentException("Host number must be positive: " + hostNumber);
+            }
             // IPv6: append host number as hex to the prefix
             String prefix = baseIp.endsWith("::") ? baseIp : baseIp.replaceAll("::?$", "::");
             return prefix + Integer.toHexString(hostNumber) + "/128";
         } else {
-            // IPv4: replace last octet
+            // IPv4: this implementation replaces the last octet, so the host must fit a single
+            // octet (1-254, excluding the network and broadcast addresses).
+            if (hostNumber < 1 || hostNumber > 254) {
+                throw new IllegalArgumentException(
+                        "Host number out of range for IPv4 network (expected 1-254): " + hostNumber);
+            }
             String[] octets = baseIp.split("\\.");
             octets[3] = String.valueOf(hostNumber);
             return String.join(".", octets) + "/32";

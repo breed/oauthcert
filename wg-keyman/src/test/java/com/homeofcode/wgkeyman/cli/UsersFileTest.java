@@ -94,4 +94,25 @@ class UsersFileTest {
         assertEquals("100", uf.formatHostNumber(100));
         assertEquals(100, uf.parseHostNumber("100"));
     }
+
+    @Test
+    void addDetectsHostCollisionOnMalformedLine() throws IOException {
+        // A line with a host number but no CN must still block re-use of that host number.
+        UsersFile uf = ipv4File("70\n");
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> uf.add(70, "new@example.com"));
+        assertTrue(ex.getMessage().contains("already in use"));
+    }
+
+    @Test
+    void removePreservesCrlfLineEndings() throws IOException {
+        Path p = tempDir.resolve("users.lst");
+        Files.writeString(p, "70 office\r\n71 ben@example.com\r\n");
+        UsersFile uf = new UsersFile(p.toString(), false);
+
+        assertTrue(uf.remove("office"));
+        String content = Files.readString(p);
+        assertTrue(content.contains("\r\n"), "CRLF should be preserved");
+        assertFalse(content.contains("office"));
+        assertTrue(content.contains("ben@example.com"));
+    }
 }

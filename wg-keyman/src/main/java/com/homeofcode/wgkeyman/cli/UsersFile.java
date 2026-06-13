@@ -47,26 +47,36 @@ public class UsersFile {
      * @throws IllegalArgumentException if the CN or host number already exists
      */
     public void add(int hostNumber, String cn) throws IOException {
-        for (Entry e : list()) {
-            if (e.cn().equals(cn)) {
-                throw new IllegalArgumentException("user already exists: " + cn);
-            }
-            if (e.hostNumber() == hostNumber) {
-                throw new IllegalArgumentException(
-                        "host number " + formatHostNumber(hostNumber) + " already in use by " + e.cn());
+        String existing = Files.exists(path) ? Files.readString(path) : "";
+        if (Files.exists(path)) {
+            for (String line : Files.readAllLines(path)) {
+                String trimmed = line.trim();
+                if (trimmed.isEmpty() || trimmed.startsWith("#")) {
+                    continue;
+                }
+                String[] parts = trimmed.split("\\s+", 2);
+                // Host-number collision: check the first token even on otherwise-malformed lines
+                // (e.g. a host number with no CN) so they can't be silently duplicated.
+                try {
+                    if (Integer.parseInt(parts[0], ipv6 ? 16 : 10) == hostNumber) {
+                        throw new IllegalArgumentException("host number " + formatHostNumber(hostNumber)
+                                + " already in use" + (parts.length == 2 ? " by " + parts[1] : ""));
+                    }
+                } catch (NumberFormatException ignore) {
+                    // first token isn't a host number; not a collision
+                }
+                if (parts.length == 2 && parts[1].equals(cn)) {
+                    throw new IllegalArgumentException("user already exists: " + cn);
+                }
             }
         }
 
-        String entryLine = formatHostNumber(hostNumber) + " " + cn;
-        StringBuilder sb = new StringBuilder();
-        if (Files.exists(path)) {
-            String existing = Files.readString(path);
-            sb.append(existing);
-            if (!existing.isEmpty() && !existing.endsWith("\n")) {
-                sb.append("\n");
-            }
+        String nl = detectNewline(existing);
+        StringBuilder sb = new StringBuilder(existing);
+        if (!existing.isEmpty() && !existing.endsWith("\n")) {
+            sb.append(nl);
         }
-        sb.append(entryLine).append("\n");
+        sb.append(formatHostNumber(hostNumber)).append(" ").append(cn).append(nl);
         Files.writeString(path, sb.toString());
     }
 
@@ -79,6 +89,7 @@ public class UsersFile {
         if (!Files.exists(path)) {
             return false;
         }
+        String nl = detectNewline(Files.readString(path));
         List<String> kept = new ArrayList<>();
         boolean removed = false;
         for (String line : Files.readAllLines(path)) {
@@ -90,9 +101,14 @@ public class UsersFile {
             kept.add(line);
         }
         if (removed) {
-            Files.writeString(path, String.join("\n", kept) + (kept.isEmpty() ? "" : "\n"));
+            Files.writeString(path, kept.isEmpty() ? "" : String.join(nl, kept) + nl);
         }
         return removed;
+    }
+
+    /** Preserve the file's existing line-ending style (CRLF vs LF) when rewriting. */
+    private static String detectNewline(String content) {
+        return content.contains("\r\n") ? "\r\n" : "\n";
     }
 
     public String formatHostNumber(int hostNumber) {

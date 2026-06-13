@@ -79,6 +79,30 @@ class WireguardServiceTest {
     }
 
     @Test
+    void testProcessPublicKey_ControlCharInEmail_IsRejected() {
+        String validPublicKey = "xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8HQ14=";
+        WireguardService.WireguardResult result = service.processPublicKey("test@example.com\nfoo", validPublicKey);
+        assertFalse(result.valid());
+        assertTrue(result.errorMessage().contains("Invalid user identifier"));
+    }
+
+    @Test
+    void testGetPeerPublicKey() {
+        // Note: the test config shares a peers file across tests, so don't assume an empty start;
+        // assert the deterministic post-submit state and that an unknown user has no key.
+        String validPublicKey = "xTIBA5rboUvnH4htodjb60Y7YAf21J7YQMlNGC8HQ14=";
+        service.processPublicKey("test@example.com", validPublicKey);
+        assertEquals(validPublicKey, service.getPeerPublicKey("test@example.com"));
+        assertNull(service.getPeerPublicKey("not-a-user@example.com"));
+    }
+
+    @Test
+    void testListPeersReturnsDefensiveCopy() {
+        service.listPeers().put("injected@example.com", "x");
+        assertFalse(service.listPeers().containsKey("injected@example.com"));
+    }
+
+    @Test
     void testProcessPublicKey_EmptyPublicKey() {
         WireguardService.WireguardResult result = service.processPublicKey("test@example.com", "");
 

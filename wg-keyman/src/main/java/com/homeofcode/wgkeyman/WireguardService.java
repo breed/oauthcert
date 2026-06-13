@@ -54,15 +54,20 @@ public class WireguardService {
     /**
      * Return the currently-tracked wg-keyman managed peers (CN -&gt; public key), in file order.
      */
-    public Map<String, String> listPeers() {
+    public synchronized Map<String, String> listPeers() {
         return new LinkedHashMap<>(peers);
+    }
+
+    /** Return the currently-registered public key for a user, or {@code null} if none. */
+    public synchronized String getPeerPublicKey(String cn) {
+        return peers.get(cn);
     }
 
     /**
      * Remove a managed peer by CN. Returns {@code true} if a peer was removed (the caller should
      * then call {@link #save()} to persist and sync), {@code false} if no such peer existed.
      */
-    public boolean removePeer(String cn) {
+    public synchronized boolean removePeer(String cn) {
         return peers.remove(cn) != null;
     }
 
@@ -377,6 +382,12 @@ public class WireguardService {
      * and supplies their public key directly.
      */
     public WireguardResult processPublicKey(String email, String publicKey) {
+        // Reject identifiers containing control characters (defense-in-depth: the CN is written
+        // into peers.conf, so a newline could otherwise inject config directives).
+        if (email == null || email.chars().anyMatch(c -> c < 0x20 || c == 0x7f)) {
+            return WireguardResult.error("Invalid user identifier");
+        }
+
         // Check authorization
         if (!isAuthorizedUser(email)) {
             return WireguardResult.error("User '" + email + "' is not authorized");
@@ -392,9 +403,13 @@ public class WireguardService {
         // Generate config
         String wgConfig = generateWireguardConfig(email, publicKey);
 
-        // Update the WireGuard peers config with the new public key
-        peers.put(email, publicKey);
-        String warning = savePeers();
+        // Atomically register the peer and persist. peers is shared across request threads, so the
+        // mutation and the (synchronized) save must happen under the same lock.
+        String warning;
+        synchronized (this) {
+            peers.put(email, publicKey);
+            warning = savePeers();
+        }
 
         if (warning != null) {
             return WireguardResult.successWithWarning(email, publicKey, wgConfig, warning);
