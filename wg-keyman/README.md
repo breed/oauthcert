@@ -39,8 +39,8 @@ java -jar wg-keyman.jar peer list
 java -jar wg-keyman.jar peer remove <CN>                # removes the managed peer and syncs WireGuard
 java -jar wg-keyman.jar peer sync                        # rebuild peers.conf from current state and reload WireGuard
 
-# Generate a client config without the web UI (printed to stdout, or -o <file>)
-java -jar wg-keyman.jar generate --cn <CN> --public-key <WG_PUBLIC_KEY>
+# Print a user's client config using their registered key (stdout, or -o <file>)
+java -jar wg-keyman.jar generate <CN>
 ```
 
 When run on the deployed server, invoke the CLI as the service user so it reads the deployment

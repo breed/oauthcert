@@ -24,7 +24,7 @@ import picocli.CommandLine.Parameters;
  *   wg-keyman peer list
  *   wg-keyman peer remove &lt;cn&gt;
  *   wg-keyman peer sync
- *   wg-keyman generate --cn &lt;cn&gt; --public-key &lt;key&gt;
+ *   wg-keyman generate &lt;cn&gt;
  * </pre>
  */
 @Command(name = "wg-keyman",
@@ -240,16 +240,12 @@ public class AdminCli implements Runnable {
     // ------------------------------------------------------------------------------- generate ---
 
     @Command(name = "generate",
-            description = "Generate a WireGuard client config (printed to stdout) without the web UI. "
-                    + "Provide --cn and --public-key.")
+            description = "Print the WireGuard client config for a user, using their registered public key.")
     static class GenerateCommand implements Callable<Integer> {
         private final CliContext ctx;
 
-        @Option(names = "--cn", required = true, description = "Common name / email of the user.")
+        @Parameters(index = "0", paramLabel = "CN", description = "Common name / email of the user.")
         String cn;
-
-        @Option(names = "--public-key", required = true, description = "WireGuard public key for the user.")
-        String publicKey;
 
         @Option(names = {"-o", "--output"}, description = "Write the config to this file instead of stdout.")
         Path output;
@@ -261,23 +257,21 @@ public class AdminCli implements Runnable {
         @Override
         public Integer call() throws Exception {
             WireguardService service = ctx.service();
-            String resolvedCn = cn;
-            String resolvedKey = publicKey.trim();
 
-            String keyError = service.validateWireguardPublicKey(resolvedKey);
-            if (keyError != null) {
-                System.err.println(keyError);
+            if (!service.isAuthorizedUser(cn)) {
+                System.err.println("User '" + cn + "' is not in users.lst.");
                 return 1;
             }
-            if (!service.isAuthorizedUser(resolvedCn)) {
-                System.err.println("User '" + resolvedCn + "' is not in users.lst.");
+            String publicKey = service.getPeerPublicKey(cn);
+            if (publicKey == null) {
+                System.err.println("No registered public key for '" + cn + "'. The user must submit a key first.");
                 return 1;
             }
 
-            String config = service.generateWireguardConfig(resolvedCn, resolvedKey);
+            String config = service.generateWireguardConfig(cn, publicKey);
             if (output != null) {
                 Files.writeString(output, config);
-                System.out.println("Wrote config for " + resolvedCn + " to " + output);
+                System.out.println("Wrote config for " + cn + " to " + output);
             } else {
                 System.out.print(config);
             }
