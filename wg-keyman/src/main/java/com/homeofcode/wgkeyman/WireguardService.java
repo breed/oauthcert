@@ -1,5 +1,6 @@
 package com.homeofcode.wgkeyman;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -29,6 +30,9 @@ public class WireguardService {
     // Track peers (CN -> public key) for the WireGuard config
     private final Map<String, String> peers = new LinkedHashMap<>();
 
+    // @Autowired marks this as the constructor Spring uses (the class has a second, CLI-only
+    // constructor; without this annotation Spring cannot choose between them).
+    @Autowired
     public WireguardService(WgKeymanConfig config) {
         this(config, true);
     }
